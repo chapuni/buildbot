@@ -61,7 +61,7 @@ def getChanges(request, options=None):
             properties = {}
             
         revision = firstOrNothing(args.get('revision'))
-        when     = firstOrNothing(args.get('when'))
+        when     = int(args.get('when')[0])
         who = firstOrNothing(args.get('who'))
         comments = firstOrNothing(args.get('comments'))
         isdir = firstOrNothing(args.get('isdir',0))
