@@ -55,6 +55,7 @@ def getChanges(request, options=None):
             properties = {}
             
         revision = firstOrNothing(args.get('revision'))
+#        when     = int(args.get('when')[0])
         when     = firstOrNothing(args.get('when'))
         if when is not None:
             when = float(when)
