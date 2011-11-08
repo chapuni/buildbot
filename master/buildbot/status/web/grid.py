@@ -140,13 +140,14 @@ class GridStatusMixin(object):
                 key= self.getSourceStampKey(ss)
                 start = build.getTimes()[0]
                 if key not in sourcestamps or sourcestamps[key][1] > start:
-                    sourcestamps[key] = (ss, start)
+                    sourcestamps[key] = (ss, start, ss.branch, ss.revision)
 
         # now sort those and take the NUMBUILDS most recent
         sourcestamps = sourcestamps.values()
         sourcestamps.sort(lambda x, y: cmp(x[1], y[1]))
-        sourcestamps = map(lambda tup : tup[0], sourcestamps)
         sourcestamps = sourcestamps[-numBuilds:]
+        sourcestamps.sort(lambda x, y: cmp(x[2], y[2]) or cmp(x[3], y[3]))
+        sourcestamps = map(lambda tup : tup[0], sourcestamps)
 
         return sourcestamps
 
