@@ -102,7 +102,7 @@ class ConsoleStatusResource(HtmlResource):
         if orderByTime:
             self.comparator = TimeRevisionComparator()
         else:
-            self.comparator = IntegerRevisionComparator()
+            self.comparator = StringRevisionComparator()
 
     def getPageTitle(self, request):
         status = self.getStatus(request)
@@ -742,3 +742,15 @@ class IntegerRevisionComparator(RevisionComparator):
     def getSortingKey(self):
         return operator.attrgetter('revision')
 
+class StringRevisionComparator(RevisionComparator):
+    def isRevisionEarlier(self, first, second):
+        try:
+            return first.revision < second.revision
+        except (TypeError, ValueError):
+            return False
+
+    def isValidRevision(self, revision):
+        return True # No general way of determining
+
+    def getSortingKey(self):
+        return operator.attrgetter('revision')
