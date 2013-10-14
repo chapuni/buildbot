@@ -440,15 +440,30 @@ class ConsoleStatusResource(HtmlResource):
             for builder in builderList[category]:
                 introducedIn = None
                 firstNotIn = None
+                isInChanges = False
 
                 # Find the first build that does not include the revision.
                 for build in allBuilds[builder]:
+                    for change in build.source.changes:
+                        if revision.revision == change.revision:
+                            isInChanges = True
+                            break
+                    if isInChanges:
+                        break
+
+                for build in allBuilds[builder]:
+                    if not isInChanges:
+                        break
                     if self.comparator.isRevisionEarlier(build, revision):
                         firstNotIn = build
                         break
-                    else:
+                    elif (introducedIn is None
+                          or self.comparator.isRevisionEarlier(
+                            build, introducedIn)):
                         introducedIn = build
-                        
+                    else:
+                        pass
+
                 # Get the results of the first build with the revision, and the
                 # first build that does not include the revision.
                 results = None
