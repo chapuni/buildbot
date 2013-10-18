@@ -53,6 +53,7 @@ class DBConnectorComponent(object):
                 "value for column %s is greater than max of %d characters: %s"
                     % (col, col.type.length, value))
 
+        # ^^^ This is the place.
 
 class CachedMethod(object):
     def __init__(self, cache_name, method):
