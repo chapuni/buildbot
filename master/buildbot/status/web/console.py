@@ -17,6 +17,7 @@ import time
 import operator
 import re
 import urllib
+import sys
 from twisted.internet import defer
 from buildbot import util
 from buildbot.status import builder
@@ -442,27 +443,29 @@ class ConsoleStatusResource(HtmlResource):
                 firstNotIn = None
                 isInChanges = False
 
-                # Find the first build that does not include the revision.
-                for build in allBuilds[builder]:
-                    for change in build.source.changes:
-                        if revision.revision == change.revision:
-                            isInChanges = True
+                # Builds is assumed to be sorted by build.number.
+                # Iterate builds with [revision, number] by reverse.
+                for build in sorted(allBuilds[builder],
+                                    key=lambda x: x.revision,
+                                    reverse=True):
+                    if introducedIn:
+                        if self.comparator.isRevisionEarlier(build, revision):
+                            firstNotIn = build
                             break
-                    if isInChanges:
-                        break
-
-                for build in allBuilds[builder]:
-                    if not isInChanges:
-                        break
-                    if self.comparator.isRevisionEarlier(build, revision):
-                        firstNotIn = build
-                        break
-                    elif (introducedIn is None
-                          or self.comparator.isRevisionEarlier(
-                            build, introducedIn)):
+                    if (introducedIn is None
+                        or introducedIn.revision != revision.revision):
                         introducedIn = build
+                    if build.revision == revision.revision:
+                        isInChanges = True
                     else:
-                        pass
+                        for change in sorted(build.source.changes):
+                            if revision.revision == change.revision:
+                                # This covers the line.
+                                introducedIn = build
+                                isInChanges = True
+
+                if not isInChanges:
+                    introducedIn = None
 
                 # Get the results of the first build with the revision, and the
                 # first build that does not include the revision.
@@ -498,6 +501,11 @@ class ConsoleStatusResource(HtmlResource):
                     pageTitle += ' ETA: %ds' % (introducedIn.eta or 0)
                     
                 resultsClass = getResultsClass(results, previousResults, isRunning)
+
+                if introducedIn and introducedIn.revision == revision.revision:
+                    pass
+                else:
+                    resultsClass += ' notbuilt'
 
                 b = {}                
                 b["url"] = url

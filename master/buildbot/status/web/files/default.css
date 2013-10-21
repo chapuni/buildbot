@@ -243,6 +243,10 @@ td.Alt {
 	white-space: nowrap;
 }
 
+.notbuilt {
+	border-color: white !important;
+}
+
 .DevStatusBox {
 	text-align: center;
 	height: 20px;
