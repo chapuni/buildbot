@@ -206,6 +206,7 @@ class SourceStamp(Row):
         codebase = '',
         project = 'proj',
         sourcestampsetid = None,
+        changes = [],
     )
 
     id_column = 'id'
