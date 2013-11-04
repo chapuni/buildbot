@@ -17,8 +17,10 @@ import mock
 from twisted.trial import unittest
 from twisted.internet import defer, task
 from buildbot import config
+from buildbot.changes.filter import ChangeFilter
 from buildbot.test.fake import fakedb
 from buildbot.schedulers import basic
+from buildbot.status.results import SUCCESS, WARNINGS, FAILURE
 from buildbot.test.util import scheduler
 
 class CommonStuffMixin(object):
@@ -448,5 +450,146 @@ class AnyBranchScheduler(CommonStuffMixin,
         def check(_):
             self.assertEqual(self.events, [ 'B[13,14]@11', 'B[15,17]@15' ])
         d.addCallback(check)
+
+        d.addCallback(lambda _ : sched.stopService())
+
+
+    def test_xxxxxxx(self):
+        """XXXXXXX"""
+
+        def dp(_):
+            print self.events
+
+        def mkch(**kwargs):
+            ch = self.makeFakeChange(**kwargs)
+            self.db.changes.fakeAddChangeInstance(ch)
+            return ch
+
+        def mkbs(bsid, ssid, changes, buildername):
+            self.db.insertTestData([
+                    fakedb.SourceStamp(
+                        id=bsid, sourcestampsetid=ssid,
+                        revision=changes[-1].revision,
+                        branch=changes[-1].branch,
+                        changes=changes,
+                        ),
+                    #fakedb.BuildRequest(buildsetid=bsid, buildername=buildername),
+                    fakedb.Buildset(
+                        id=bsid,
+                        sourcestampsetid=ssid,
+                        )
+                    ])
+
+        # Upstream (filter to be peeked)
+        up1 = basic.SingleBranchScheduler(
+            name="up1",
+            change_filter=ChangeFilter(category_re='.*1.*'),
+            builderNames=['bup1'],
+            )
+
+        up2 = basic.SingleBranchScheduler(
+            name="up2",
+            change_filter=ChangeFilter(category_re='.*[12].*'),
+            builderNames=['bup2'],
+            )
+
+        sched = self.makeScheduler(
+            basic.AnyBranchScheduler,
+            treeStableTimer=None,
+            # upstreams should be a scheduler with one builder!
+            upstreams=[
+                up1,
+                up2,
+                ],
+            )
+
+        sched.startService()
+
+        d = defer.succeed(None)
+
+        # Changes
+        ch20 = mkch(branch='master', category='3', revision='10020', number=20)
+
+        # up1 and up2
+        ch21 = mkch(branch='master', category='1', revision='10021', number=21)
+        ch22 = mkch(branch='master', category='2', revision='10022', number=22)
+
+        ch23 = mkch(branch='master', category='1', revision='10023', number=23)
+        ch24 = mkch(branch='master', category='2', revision='10024', number=24)
+        #ch23 = mkch(branch='master', category='3', revision='10023', number=23)
+
+        # SS, BS (up1)
+        #mkbs(bsid=91, ssid=1091, changes=[ch21], buildername='up1')
+        # SS, BS (up2)
+        #mkbs(bsid=92, ssid=1092, changes=[ch21,ch22], buildername='up2')
+        # print self.master.getSubscriptionCallbacks().keys()
+        # self.master.getSubscriptionCallbacks()['buildset_completion'](bsid=44,
+        #                                                               #properties=dict(scheduler=("up2", 'Scheduler')),
+        #                                                               )
+
+        # Make sure a change should be fed if upstreams aren't interested to it.
+        d.addCallback(lambda _ : sched.gotChange(ch20, True))
+        d.addCallback(lambda _ : self.assertEqual(self.events, ['B[20]@0']))
+
+        def start_bs(bsid, changes, upstream):
+            mkbs(bsid=bsid, ssid=1000+bsid, changes=changes, buildername=upstream.name)
+            return lambda _ : (
+                self.master.getSubscriptionCallbacks()['buildsets'](
+                    bsid=bsid,
+                    properties=dict(
+                        scheduler=(upstream.name, 'Scheduler'),
+                        buildername=(upstream.builderNames[0], 'Builder'),
+                        ),
+                    ))
+
+        def complete_bs(bsid):
+            return lambda _ : self.master.getSubscriptionCallbacks()['buildset_completion'](bsid=bsid, result=SUCCESS)
+
+        def feed_change(ch):
+            return lambda _ : sched.gotChange(ch, True)
+
+        d.addCallback(feed_change(ch21))
+        d.addCallback(start_bs(bsid=91, upstream=up1, changes=[ch21]))
+        d.addCallback(feed_change(ch22))
+        d.addCallback(start_bs(bsid=92, upstream=up2, changes=[ch21,ch22]))
+
+        # Make sure upstream-interested changes should be pending.
+        d.addCallback(lambda _ : self.assertEqual(self.events, ['B[20]@0']))
+
+        # Make sure bs91 doesn't fire anything.
+        d.addCallback(complete_bs(bsid=91))
+        d.addCallback(dp)
+
+        # Make sure bs92 fires both ch21 and ch22.
+        d.addCallback(complete_bs(bsid=92))
+        d.addCallback(dp)
+
+        
+
+
+
+
+        # d.addCallback(lambda _ : sched.gotChange(ch23, True))
+        # d.addCallback(start_bs(bsid=93, upstream=up1, changes=[ch23]))
+        # d.addCallback(lambda _ : self.clock.advance(10))
+        # d.addCallback(lambda _ : sched.gotChange(ch24, True))
+        # d.addCallback(start_bs(bsid=94, upstream=up2, changes=[ch23,ch24]))
+        # d.addCallback(lambda _ : self.clock.advance(10))
+        # d.addCallback(ev_equal(['B[20]@10']))
+
+        # # Graduate 92. Make sure ch21 and ch22 are graduated.
+        # d.addCallback(lambda _ : self.master.getSubscriptionCallbacks()['buildset_completion'](bsid=92, result=SUCCESS))
+        
+
+
+
+
+        # d.addCallback(lambda _ : sched.gotChange(ch23, True))
+        # d.addCallback(dp)
+        # d.addCallback(lambda _ : self.clock.advance(10))
+        # d.addCallback(dp)
+        # d.addCallback(dp)
+        # d.addCallback(lambda _ : self.master.getSubscriptionCallbacks()['buildset_completion'](bsid=91, result=SUCCESS))
+        # d.addCallback(dp)
 
         d.addCallback(lambda _ : sched.stopService())
