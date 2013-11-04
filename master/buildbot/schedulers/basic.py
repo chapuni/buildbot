@@ -81,9 +81,10 @@ class BaseBasicScheduler(base.BaseScheduler):
     def startService(self, _returnDeferred=False):
         base.BaseScheduler.startService(self)
 
-        self._buildset_addition_subscr = \
+        if self.upstreams:
+            self._buildset_addition_subscr = \
                 self.master.subscribeToBuildsets(self._buildsetAdded)
-        self._buildset_completion_subscr = \
+            self._buildset_completion_subscr = \
                 self.master.subscribeToBuildsetCompletions(self._buildsetCompleted)
         d = self.startConsumingChanges(fileIsImportant=self.fileIsImportant,
                                        change_filter=self.change_filter,
@@ -128,7 +129,7 @@ class BaseBasicScheduler(base.BaseScheduler):
 
         # Demote a change unimportant, if either of upstreams accepts it.
         pending = False
-        if important and self.upstreams:
+        if important and not self.treeStableTimer:
             if not self.pendings.has_key(timer_name):
                 self.pendings[timer_name] = {}
             p = self.pendings[timer_name]
@@ -137,11 +138,12 @@ class BaseBasicScheduler(base.BaseScheduler):
                     'builders': {},
                     'change': change,
                     }
-            for ups in self.upstreams:
-                if not ups.change_filter or ups.change_filter.filter_change(change):
-                    # Inactivate this until completed.
-                    pending = True
-                    p[change.revision]['builders'][ups.builderNames[0]] = True
+            if self.upstreams:
+                for ups in self.upstreams:
+                    if not ups.change_filter or ups.change_filter.filter_change(change):
+                        # Inactivate this until completed.
+                        pending = True
+                        p[change.revision]['builders'][ups.builderNames[0]] = True
 
         if not important:
             pending = True
@@ -243,8 +245,10 @@ class BaseBasicScheduler(base.BaseScheduler):
 
     @util.deferredLocked('_subscription_lock')
     def _buildsetAdded(self, bsid=None, properties=None, **kwargs):
+        if not kwargs.has_key('builderNames'):
+            return
+        buildername = kwargs['builderNames'][0]
         # Look into builder rather than scheduler.
-        buildername = properties.get('buildername', (None, None))[0]
         for ups in self.upstreams:
             if buildername in ups.builderNames:
                 self.buildernames[bsid] = buildername
