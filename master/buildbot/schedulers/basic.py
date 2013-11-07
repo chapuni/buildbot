@@ -255,25 +255,35 @@ class BaseBasicScheduler(base.BaseScheduler):
                 return
 
     def _buildsetCompleted(self, bsid, result):
-        if self.buildernames.has_key(bsid):
-            d = self._checkCompletedBuildsets(bsid, result)
-            del self.buildernames[bsid]
-        else:
-            d = defer.succeed(None)
-
+        d = self._checkCompletedBuildsets(bsid, result)
         d.addErrback(log.err, 'while checking for completed buildsets')
 
     @util.deferredLocked('_subscription_lock')
     @defer.inlineCallbacks
     def _checkCompletedBuildsets(self, bsid, result):
+        print "****<%s>****" % self.name
+        print "****BSID: ", bsid
+        print "********PEND: ", self.pendings
+        print "****master: ", self.master
+        print "****RESULT: ", result
+
         # For now, leave changes pending when result was not successful.
         if result not in (SUCCESS, WARNINGS):
             yield defer.succeed(None)
             return
 
+        if not self.buildernames.has_key(bsid):
+            yield defer.succeed(None)
+            return
+
+        print "****buildernames: ", self.buildernames
         buildername = self.buildernames[bsid]
-        bsdict = yield self.master.db.buildsets.getBuildset(bsid)
+        del self.buildernames[bsid]
+        bsdict = yield self.master.db.buildsets.getBuildset(bsid) # exceptions.AttributeError: 'NoneType' object has no attribute 'db'
         sss = yield self.master.db.sourcestamps.getSourceStamps(bsdict['sourcestampsetid'])
+        print "****BuilderName: ", buildername
+        print "****BS: ", bsdict
+        print "***SSS: ", sss
         max_changeid = -1
         max_rev = ''
         for ss in sss:
