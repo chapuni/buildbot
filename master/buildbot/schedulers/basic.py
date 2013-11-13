@@ -64,6 +64,8 @@ class BaseBasicScheduler(base.BaseScheduler):
         self.buildernames = {}
         self.pendings = {}
         self.upstreams = upstreams
+        self._buildset_addition_subscr = None
+        self._buildset_completion_subscr = None
 
         # the IDelayedCall used to wake up when this scheduler's
         # treeStableTimer expires.
@@ -93,7 +95,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         # if treeStableTimer is False, then we don't care about classified
         # changes, so get rid of any hanging around from previous
         # configurations
-        if not self.treeStableTimer:
+        if False and not self.treeStableTimer:
             d.addCallback(lambda _ :
                 self.master.db.schedulers.flushChangeClassifications(
                                                         self.objectid))
@@ -112,6 +114,12 @@ class BaseBasicScheduler(base.BaseScheduler):
             return d # only used in tests
 
     def stopService(self):
+        if self._buildset_addition_subscr:
+            self._buildset_addition_subscr.unsubscribe()
+            self._buildset_addition_subscr = None
+        if self._buildset_completion_subscr:
+            self._buildset_completion_subscr.unsubscribe()
+            self._buildset_completion_subscr = None
         # the base stopService will unsubscribe from new changes
         d = base.BaseScheduler.stopService(self)
         @util.deferredLocked(self._stable_timers_lock)
