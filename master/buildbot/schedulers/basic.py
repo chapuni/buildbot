@@ -133,7 +133,10 @@ class BaseBasicScheduler(base.BaseScheduler):
 
     @util.deferredLocked('_stable_timers_lock')
     def gotChange(self, change, important):
-        timer_name = change.branch # FIXME!
+        timer_name = self.getTimerNameForChange(change)
+
+        print "********************************gotChange<%s>" % self.name
+        print "TIMER_NAME=", timer_name
 
         # Demote a change unimportant, if either of upstreams accepts it.
         pending = False
@@ -142,8 +145,9 @@ class BaseBasicScheduler(base.BaseScheduler):
                 self.pendings[timer_name] = {}
             p = self.pendings[timer_name]
             if not p.has_key(change.revision):
-                p[change.revision] = {
+                p[change.number] = {
                     'builders': {},
+                    'revision': change.revision,
                     'change': change,
                     }
             if self.upstreams:
@@ -151,7 +155,7 @@ class BaseBasicScheduler(base.BaseScheduler):
                     if not ups.change_filter or ups.change_filter.filter_change(change):
                         # Inactivate this until completed.
                         pending = True
-                        p[change.revision]['builders'][ups.builderNames[0]] = True
+                        p[change.number]['builders'][ups.builderNames[0]] = True
 
         if not important:
             pending = True
@@ -163,13 +167,14 @@ class BaseBasicScheduler(base.BaseScheduler):
             if not important:
                 return defer.succeed(None)
 
+            print "****gotChange: PEND:", self.pendings
+
             d = self.master.db.schedulers.classifyChanges(
                 self.objectid, { change.number : important })
             if not pending:
-                d.addCallback(lambda _: self.activatePendingChanges(change.revision, timer_name))
+                d.addCallback(lambda _: self.aaa(timer_name))
+            print "****DEFERRED:", pending
             return d
-
-        timer_name = self.getTimerNameForChange(change)
 
         # if we have a treeStableTimer, then record the change's importance
         # and:
@@ -246,6 +251,51 @@ class BaseBasicScheduler(base.BaseScheduler):
         yield self.master.db.schedulers.flushChangeClassifications(
                             self.objectid, less_than=max_changeid+1)
 
+    @defer.inlineCallbacks
+    def aaa(self, timer_name):
+        # Get changes (from scheduler_changes)
+        print "****AAA", timer_name
+        classifications = \
+            yield self.getChangeClassificationsForTimer(self.objectid,
+                                                            timer_name)
+
+        print "class=", classifications
+
+        # just in case: databases do weird things sometimes!
+        if not classifications: # pragma: no cover
+            return
+
+        print "****KEY=", timer_name
+
+        changeids = sorted(classifications.keys(), reverse=True)
+        print "****ORIG_changeids=", changeids
+
+        # Seek the latest change (in reverse) to graduate.
+        max_i = -1
+        if self.pendings.has_key(timer_name):
+            p = self.pendings[timer_name]
+            for i, changeid in enumerate(changeids):
+                if p.has_key(changeid):
+                    if max_i < 0 and len(p[changeid]['builders']) == 0:
+                        max_i = i
+                    if max_i >= 0:
+                        del p[changeid]
+
+        if max_i < 0:
+            return
+
+        changeids = changeids[max_i:][::-1]
+
+        print "****GRADUATED: ", changeids
+
+        yield self.addBuildsetForChanges(reason='scheduler',
+                                           changeids=changeids)
+
+        max_changeid = changeids[-1] # (changeids are sorted)
+        # FIXME: Does it flush changes in other branches?
+        yield self.master.db.schedulers.flushChangeClassifications(
+                            self.objectid, less_than=max_changeid+1)
+
     def getPendingBuildTimes(self):
         # This isn't locked, since the caller expects and immediate value,
         # and in any case, this is only an estimate.
@@ -277,7 +327,7 @@ class BaseBasicScheduler(base.BaseScheduler):
     def _checkCompletedBuildsets(self, bsid, result):
         print "****<%s>****" % self.name
         print "****BSID: ", bsid
-        print "********PEND: ", self.pendings
+        print "****PEND: ", self.pendings
         print "****master: ", self.master
         print "****RESULT: ", result
 
@@ -299,55 +349,30 @@ class BaseBasicScheduler(base.BaseScheduler):
         print "****BuilderName: ", buildername
         print "****BS: ", bsdict
         print "***SSS: ", sss
-        max_changeid = -1
-        max_rev = ''
+
+        timer_name = None
+        found = False
         for ss in sss:
             branch = ss['branch']
             rev = ss['revision']
-            if self.pendings.has_key(branch) and self.pendings[branch].has_key(rev):
-                p = self.pendings[branch][rev]
-                if not p['builders'].has_key(buildername):
-                    continue
-                del p['builders'][buildername]
-                if len(p['builders']) > 0:
-                    continue
-                if max_changeid < p['change'].number:
-                    max_changeid = p['change'].number
-                    max_rev = rev
+            timer_name = (ss['codebase'], ss['project'], ss['repository'], ss['branch'])
+            for changeid, p in self.pendings[timer_name].items():
+                print "***chid=", changeid
+                print "***p=", p
+                if p['change'].revision == rev and p['builders'].has_key(buildername):
+                    del p['builders'][buildername]
+                    found = True
+                    break
 
-        if max_changeid < 0:
+        print "****PEND(after): ", self.pendings
+
+        if not found:
+            print "not found"
             yield defer.succeed(None)
             return
 
-        yield self.activatePendingChanges(max_rev, branch)
+        yield self.aaa(timer_name)
         return
-
-    def activatePendingChanges(self, rev, key):
-        if not self.pendings.has_key(key):
-            return defer.succeed(None)
-
-        p = self.pendings[key]
-
-        if not p.has_key(rev):
-            return defer.succeed(None)
-
-        max_changeid = p[rev]['change'].number
-
-        changeids=[]
-        for rev in sorted(p.keys(), key=lambda x: p[x]['change'].number):
-            i = p[rev]['change'].number
-            if i <= max_changeid:
-                changeids.append(i)
-                del p[rev]
-
-        self.addBuildsetForChanges(
-            reason='scheduler',
-            changeids=changeids,
-            )
-        # FIXME: It might be unaware of branches.
-        self.master.db.schedulers.flushChangeClassifications(
-            self.objectid, less_than=max_changeid+1)
-        return defer.succeed(None)
 
 class SingleBranchScheduler(BaseBasicScheduler):
     def getChangeFilter(self, branch, branches, change_filter, categories):
