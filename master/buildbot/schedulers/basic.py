@@ -253,6 +253,7 @@ class BaseBasicScheduler(base.BaseScheduler):
 
     @util.deferredLocked('_subscription_lock')
     def _buildsetAdded(self, bsid=None, properties=None, **kwargs):
+        # Assumption: This callback has an argument 'builderNames'.
         if not kwargs.has_key('builderNames'):
             return
         # For now, a scheduler is assumed to fire at most one builder.
@@ -264,6 +265,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         for ups in self.upstreams:
             if buildername in ups.builderNames:
                 self.buildernames[bsid] = buildername
+                # TODO: Suspend timer.
                 return
 
     def _buildsetCompleted(self, bsid, result):
@@ -284,6 +286,7 @@ class BaseBasicScheduler(base.BaseScheduler):
             yield defer.succeed(None)
             return
 
+        # Oh no, I don't know such a bsid, ... do nothing.
         if not self.buildernames.has_key(bsid):
             yield defer.succeed(None)
             return
