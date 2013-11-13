@@ -255,7 +255,11 @@ class BaseBasicScheduler(base.BaseScheduler):
     def _buildsetAdded(self, bsid=None, properties=None, **kwargs):
         if not kwargs.has_key('builderNames'):
             return
-        buildername = kwargs['builderNames'][0]
+        # For now, a scheduler is assumed to fire at most one builder.
+        if len(kwargs['builderNames']) != 1:
+            return
+        for x in kwargs['builderNames']:
+            buildername = x
         # Look into builder rather than scheduler.
         for ups in self.upstreams:
             if buildername in ups.builderNames:
