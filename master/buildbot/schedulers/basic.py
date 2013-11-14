@@ -138,9 +138,9 @@ class BaseBasicScheduler(base.BaseScheduler):
         print "********************************gotChange<%s>" % self.name
         print "TIMER_NAME=", timer_name
 
-        # Demote a change unimportant, if either of upstreams accepts it.
+        # Mark a change as pending, if either of upstreams accepts it.
         pending = False
-        if important and not self.treeStableTimer:
+        if important and self.upstreams:
             if not self.pendings.has_key(timer_name):
                 self.pendings[timer_name] = {}
             p = self.pendings[timer_name]
@@ -150,12 +150,11 @@ class BaseBasicScheduler(base.BaseScheduler):
                     'revision': change.revision,
                     'change': change,
                     }
-            if self.upstreams:
-                for ups in self.upstreams:
-                    if not ups.change_filter or ups.change_filter.filter_change(change):
-                        # Inactivate this until completed.
-                        pending = True
-                        p[change.number]['builders'][ups.builderNames[0]] = True
+            for ups in self.upstreams:
+                if not ups.change_filter or ups.change_filter.filter_change(change):
+                    # Inactivate this until completed.
+                    pending = True
+                    p[change.number]['builders'][ups.builderNames[0]] = True
 
         if not important:
             pending = True
@@ -163,7 +162,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         if not self.treeStableTimer:
             # if there's no treeStableTimer, we can completely ignore
             # unimportant changes
-            # FIXME: Don't ignore and do classify it if we could blame it.
+            # FIXME: Don't ignore and do classify it, even if we could blame it.
             if not important:
                 return defer.succeed(None)
 
@@ -192,7 +191,11 @@ class BaseBasicScheduler(base.BaseScheduler):
                 d.addErrback(log.err, "while firing stable timer")
             self._stable_timers[timer_name] = self._reactor.callLater(
                     self.treeStableTimer, fire_timer)
-        d.addCallback(fix_timer)
+        if not pending:
+            d.addCallback(fix_timer)
+        else:
+            print "****after PEND:", self.pendings
+            # FIXME: Cancel timer.
         return d
 
     @defer.inlineCallbacks
@@ -232,24 +235,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         if not self._stable_timers[timer_name]:
             return
 
-        # delete this now-fired timer
-        del self._stable_timers[timer_name]
-
-        classifications = \
-            yield self.getChangeClassificationsForTimer(self.objectid,
-                                                            timer_name)
-
-        # just in case: databases do weird things sometimes!
-        if not classifications: # pragma: no cover
-            return
-
-        changeids = sorted(classifications.keys())
-        yield self.addBuildsetForChanges(reason='scheduler',
-                                           changeids=changeids)
-
-        max_changeid = changeids[-1] # (changeids are sorted)
-        yield self.master.db.schedulers.flushChangeClassifications(
-                            self.objectid, less_than=max_changeid+1)
+        yield self.aaa(timer_name)
 
     @defer.inlineCallbacks
     def aaa(self, timer_name):
@@ -280,6 +266,12 @@ class BaseBasicScheduler(base.BaseScheduler):
                         max_i = i
                     if max_i >= 0:
                         del p[changeid]
+                else:
+                    if max_i < 0:
+                        max_i = i
+        else:
+            # ALL
+            max_i = 0
 
         if max_i < 0:
             return
@@ -304,6 +296,7 @@ class BaseBasicScheduler(base.BaseScheduler):
     @util.deferredLocked('_subscription_lock')
     def _buildsetAdded(self, bsid=None, properties=None, **kwargs):
         # Assumption: This callback has an argument 'builderNames'.
+        print "********kwargs", kwargs
         if not kwargs.has_key('builderNames'):
             return
         # For now, a scheduler is assumed to fire at most one builder.
@@ -315,7 +308,19 @@ class BaseBasicScheduler(base.BaseScheduler):
         for ups in self.upstreams:
             if buildername in ups.builderNames:
                 self.buildernames[bsid] = buildername
-                # TODO: Suspend timer.
+                # Suspend timer.
+                for tn,vr in self.pendings.items():
+                    if not self._stable_timers[tn]:
+                        continue
+                    for rev,vp in vr.items():
+                        for bn in vp['builders'].keys():
+                            if bn == buildername and self._stable_timers[tn]:
+                                print "****CANCELLING", tn
+                                self._stable_timers[tn].cancel()
+                                #self._stable_timers[tn] = None
+                                break
+                        if not self._stable_timers[tn]:
+                            break
                 return
 
     def _buildsetCompleted(self, bsid, result):
@@ -371,8 +376,37 @@ class BaseBasicScheduler(base.BaseScheduler):
             yield defer.succeed(None)
             return
 
-        yield self.aaa(timer_name)
+        if not self.treeStableTimer:
+            yield self.aaa(timer_name)
+            return
+
+        def fix_timer(_):
+            print "****fix_timer", timer_name
+            if self._stable_timers[timer_name]:
+                self._stable_timers[timer_name].cancel()
+            def fire_timer():
+                d = self.stableTimerFired(timer_name)
+                d.addErrback(log.err, "while firing stable timer")
+            self._stable_timers[timer_name] = self._reactor.callLater(
+                    self.treeStableTimer, fire_timer)
+        d = defer.Deferred()
+        print "****ADDING timer", timer_name
+        #d.addCallback(fix_timer)
+        d.addCallback(lambda _: self.fff(timer_name))
+        yield d
         return
+
+    @util.deferredLocked('_stable_timers_lock')
+    @defer.inlineCallbacks
+    def fff(self, timer_name):
+        print "****fix_timer", timer_name
+        if self._stable_timers[timer_name]:
+            self._stable_timers[timer_name].cancel()
+        def fire_timer():
+            d = self.stableTimerFired(timer_name)
+            d.addErrback(log.err, "while firing stable timer")
+        self._stable_timers[timer_name] = self._reactor.callLater(
+            self.treeStableTimer, fire_timer)
 
 class SingleBranchScheduler(BaseBasicScheduler):
     def getChangeFilter(self, branch, branches, change_filter, categories):
