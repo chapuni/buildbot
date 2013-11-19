@@ -125,7 +125,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         @util.deferredLocked(self._stable_timers_lock)
         def cancel_timers(_):
             for timer in self._stable_timers.values():
-                if timer:
+                if timer and timer.active():
                     timer.cancel()
             self._stable_timers.clear()
         d.addCallback(cancel_timers)
@@ -184,7 +184,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         def fix_timer(_):
             if not important and not self._stable_timers[timer_name]:
                 return
-            if self._stable_timers[timer_name]:
+            if self._stable_timers[timer_name] and self._stable_timers[timer_name].active():
                 self._stable_timers[timer_name].cancel()
             def fire_timer():
                 d = self.stableTimerFired(timer_name)
@@ -296,6 +296,7 @@ class BaseBasicScheduler(base.BaseScheduler):
     @util.deferredLocked('_subscription_lock')
     def _buildsetAdded(self, bsid=None, properties=None, **kwargs):
         # Assumption: This callback has an argument 'builderNames'.
+        print "****<%s>****" % self.name
         print "********kwargs", kwargs
         if not kwargs.has_key('builderNames'):
             return
@@ -314,7 +315,7 @@ class BaseBasicScheduler(base.BaseScheduler):
                         continue
                     for rev,vp in vr.items():
                         for bn in vp['builders'].keys():
-                            if bn == buildername and self._stable_timers[tn]:
+                            if bn == buildername and self._stable_timers[tn] and self._stable_timers[tn].active():
                                 print "****CANCELLING", tn
                                 self._stable_timers[tn].cancel()
                                 #self._stable_timers[tn] = None
@@ -380,16 +381,17 @@ class BaseBasicScheduler(base.BaseScheduler):
             yield self.aaa(timer_name)
             return
 
-        def fix_timer(_):
-            print "****fix_timer", timer_name
-            if self._stable_timers[timer_name]:
-                self._stable_timers[timer_name].cancel()
-            def fire_timer():
-                d = self.stableTimerFired(timer_name)
-                d.addErrback(log.err, "while firing stable timer")
-            self._stable_timers[timer_name] = self._reactor.callLater(
-                    self.treeStableTimer, fire_timer)
+        # def fix_timer(_):
+        #     print "****fix_timer", timer_name
+        #     if self._stable_timers[timer_name]:
+        #         self._stable_timers[timer_name].cancel()
+        #     def fire_timer():
+        #         d = self.stableTimerFired(timer_name)
+        #         d.addErrback(log.err, "while firing stable timer")
+        #     self._stable_timers[timer_name] = self._reactor.callLater(
+        #             self.treeStableTimer, fire_timer)
         d = defer.Deferred()
+        d.callback(None)
         print "****ADDING timer", timer_name
         #d.addCallback(fix_timer)
         d.addCallback(lambda _: self.fff(timer_name))
@@ -397,10 +399,9 @@ class BaseBasicScheduler(base.BaseScheduler):
         return
 
     @util.deferredLocked('_stable_timers_lock')
-    @defer.inlineCallbacks
     def fff(self, timer_name):
         print "****fix_timer", timer_name
-        if self._stable_timers[timer_name]:
+        if self._stable_timers[timer_name] and self._stable_timers[timer_name].active():
             self._stable_timers[timer_name].cancel()
         def fire_timer():
             d = self.stableTimerFired(timer_name)
