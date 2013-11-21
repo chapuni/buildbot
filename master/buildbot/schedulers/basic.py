@@ -337,11 +337,6 @@ class BaseBasicScheduler(base.BaseScheduler):
         print "****master: ", self.master
         print "****RESULT: ", result
 
-        # For now, leave changes pending when result was not successful.
-        if result not in (SUCCESS, WARNINGS):
-            yield defer.succeed(None)
-            return
-
         # Oh no, I don't know such a bsid, ... do nothing.
         if not self.buildernames.has_key(bsid):
             yield defer.succeed(None)
@@ -350,6 +345,17 @@ class BaseBasicScheduler(base.BaseScheduler):
         print "****buildernames: ", self.buildernames
         buildername = self.buildernames[bsid]
         del self.buildernames[bsid]
+
+        # Don't fire other builds are pending in "buildername".
+        if buildername in self.buildernames.values():
+            yield defer.succeed(None)
+            return
+
+        # For now, leave changes pending when result was not successful.
+        if result not in (SUCCESS, WARNINGS):
+            yield defer.succeed(None)
+            return
+
         bsdict = yield self.master.db.buildsets.getBuildset(bsid) # exceptions.AttributeError: 'NoneType' object has no attribute 'db'
         sss = yield self.master.db.sourcestamps.getSourceStamps(bsdict['sourcestampsetid'])
         print "****BuilderName: ", buildername
@@ -362,6 +368,8 @@ class BaseBasicScheduler(base.BaseScheduler):
             branch = ss['branch']
             rev = ss['revision']
             timer_name = (ss['codebase'], ss['project'], ss['repository'], ss['branch'])
+            if not self.pendings.has_key(timer_name):
+                continue
             for changeid, p in self.pendings[timer_name].items():
                 print "***chid=", changeid
                 print "***p=", p
