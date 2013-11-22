@@ -352,9 +352,9 @@ class BaseBasicScheduler(base.BaseScheduler):
             return
 
         # For now, leave changes pending when result was not successful.
-        if result not in (SUCCESS, WARNINGS):
-            yield defer.succeed(None)
-            return
+        # if result not in (SUCCESS, WARNINGS):
+        #     yield defer.succeed(None)
+        #     return
 
         bsdict = yield self.master.db.buildsets.getBuildset(bsid) # exceptions.AttributeError: 'NoneType' object has no attribute 'db'
         sss = yield self.master.db.sourcestamps.getSourceStamps(bsdict['sourcestampsetid'])
@@ -368,6 +368,8 @@ class BaseBasicScheduler(base.BaseScheduler):
             branch = ss['branch']
             rev = ss['revision']
             timer_name = (ss['codebase'], ss['project'], ss['repository'], ss['branch'])
+            if result not in (SUCCESS, WARNINGS):
+                continue
             if not self.pendings.has_key(timer_name):
                 continue
             for changeid, p in self.pendings[timer_name].items():
@@ -378,10 +380,13 @@ class BaseBasicScheduler(base.BaseScheduler):
                     found = True
                     break
 
-        print "****PEND(after): ", self.pendings
-
-        if not found:
+        if found:
+            print "****PEND(after): ", self.pendings
+        else:
             print "not found"
+
+        if timer_name is None:
+            print "****%s: I don't know which builder is..." % self.name
             yield defer.succeed(None)
             return
 
