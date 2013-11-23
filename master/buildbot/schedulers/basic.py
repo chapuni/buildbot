@@ -154,7 +154,7 @@ class BaseBasicScheduler(base.BaseScheduler):
                 if not ups.change_filter or ups.change_filter.filter_change(change):
                     # Inactivate this until completed.
                     pending = True
-                    p[change.number]['builders'][ups.builderNames[0]] = True
+                    p[change.number]['builders'][ups.builderNames[0]] = None
 
         if not important:
             pending = True
@@ -253,32 +253,36 @@ class BaseBasicScheduler(base.BaseScheduler):
 
         print "****KEY=", timer_name
 
-        changeids = sorted(classifications.keys(), reverse=True)
+        changeids = sorted(classifications.keys())
         print "****ORIG_changeids=", changeids
-
-        # Seek the latest change (in reverse) to graduate.
         max_i = -1
+        builders_st = {}
         if self.pendings.has_key(timer_name):
             p = self.pendings[timer_name]
             for i, changeid in enumerate(changeids):
                 if p.has_key(changeid):
-                    if max_i < 0 and len(p[changeid]['builders']) == 0:
-                        max_i = i
-                    if max_i >= 0:
-                        del p[changeid]
-                else:
-                    if max_i < 0:
-                        max_i = i
+                    builders_st.update(p[changeid]['builders'])
+                for b,s in builders_st.items():
+                    if s == True:
+                        del builders_st[b]
+                if len(builders_st) == 0:
+                    max_i = i
         else:
             # ALL
-            max_i = 0
+            max_i = len(changeids)
 
         if max_i < 0:
             return
 
-        changeids = changeids[max_i:][::-1]
+        changeids = changeids[:max_i+1]
 
-        print "****GRADUATED: ", changeids
+        # Purge graduated changeids
+        if self.pendings.has_key(timer_name):
+            for changeid in changeids:
+                print "****<%s>:GRADUATED:" % self.name, self.pendings[timer_name][changeid]
+                del self.pendings[timer_name][changeid]
+        else:
+            print "****<%s>GRADUATED:" % self.name, timer_name, changeids
 
         yield self.addBuildsetForChanges(reason='scheduler',
                                            changeids=changeids)
@@ -368,17 +372,20 @@ class BaseBasicScheduler(base.BaseScheduler):
             branch = ss['branch']
             rev = ss['revision']
             timer_name = (ss['codebase'], ss['project'], ss['repository'], ss['branch'])
-            if result not in (SUCCESS, WARNINGS):
-                continue
             if not self.pendings.has_key(timer_name):
                 continue
             for changeid, p in self.pendings[timer_name].items():
                 print "***chid=", changeid
                 print "***p=", p
                 if p['change'].revision == rev and p['builders'].has_key(buildername):
-                    del p['builders'][buildername]
-                    found = True
-                    break
+                    if result in (SUCCESS, WARNINGS):
+                        #del p['builders'][buildername]
+                        p['builders'][buildername] = True
+                        found = True
+                        break # Mark 1st entry.
+                    else:
+                        p['builders'][buildername] = False
+                        break
 
         if found:
             print "****PEND(after): ", self.pendings
