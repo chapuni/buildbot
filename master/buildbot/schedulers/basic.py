@@ -262,10 +262,8 @@ class BaseBasicScheduler(base.BaseScheduler):
             for i, changeid in enumerate(changeids):
                 if p.has_key(changeid):
                     builders_st.update(p[changeid]['builders'])
-                for b,s in builders_st.items():
-                    if s == True:
-                        del builders_st[b]
-                if len(builders_st) == 0:
+                st = builders_st.values()
+                if not None in st and not False in st:
                     max_i = i
         else:
             # ALL
