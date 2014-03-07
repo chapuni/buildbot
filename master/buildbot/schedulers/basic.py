@@ -42,7 +42,7 @@ class BaseBasicScheduler(base.BaseScheduler):
     def __init__(self, name, shouldntBeSet=NotSet, treeStableTimer=None,
                 builderNames=None, branch=NotABranch, branches=NotABranch,
                 fileIsImportant=None, properties={}, categories=None,
-                upstreams=None,
+                upstreams=None, waitAllUpstreams = True,
                 change_filter=None, onlyImportant=False, **kwargs):
         if shouldntBeSet is not self.NotSet:
             config.error(
@@ -64,6 +64,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         self.buildernames = {}
         self.pendings = {}
         self.upstreams = upstreams
+        self.waitAllUpstreams = waitAllUpstreams
         self._buildset_addition_subscr = None
         self._buildset_completion_subscr = None
 
@@ -259,6 +260,8 @@ class BaseBasicScheduler(base.BaseScheduler):
         builders_st = {}
         if self.pendings.has_key(timer_name):
             p = self.pendings[timer_name]
+            if not self.waitAllUpstreams:
+                builders_st = {}
             for i, changeid in enumerate(changeids):
                 if p.has_key(changeid):
                     builders_st.update(p[changeid]['builders'])
