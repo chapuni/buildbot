@@ -67,6 +67,9 @@ class BaseBasicScheduler(base.BaseScheduler):
         self.waitAllUpstreams = waitAllUpstreams
         self._buildset_addition_subscr = None
         self._buildset_completion_subscr = None
+        # XXX
+        #self.treeStableTimer = None
+        #self.upstreams = None
 
         # the IDelayedCall used to wake up when this scheduler's
         # treeStableTimer expires.
