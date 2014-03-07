@@ -372,7 +372,7 @@ class BaseBasicScheduler(base.BaseScheduler):
         for ss in sss:
             branch = ss['branch']
             rev = ss['revision']
-            timer_name = (ss['codebase'], ss['project'], ss['repository'], ss['branch'])
+            timer_name = (ss['codebase'], ss['project'], u'git://github.com/chapuni/llvm-project', ss['branch'])
             if not self.pendings.has_key(timer_name):
                 continue
             for changeid, p in self.pendings[timer_name].items():
@@ -473,7 +473,7 @@ class AnyBranchScheduler(BaseBasicScheduler):
 
     def getTimerNameForChange(self, change):
         # Py2.6+: could be a namedtuple
-        return (change.codebase, change.project, change.repository, change.branch)
+        return (change.codebase, change.project, u'git://github.com/chapuni/llvm-project', change.branch)
 
     def getChangeClassificationsForTimer(self, objectid, timer_name):
         codebase, project, repository, branch = timer_name # set in getTimerNameForChange
