@@ -98,6 +98,8 @@ class Model(base.DBConnectorComponent):
         # request to complete
         sa.Column('waited_for', sa.SmallInteger,
                   server_default=sa.DefaultClause("0")),
+
+        sa.Column('buildid', sa.Integer),
     )
 
     # Each row in this table represents a claimed build request, where the

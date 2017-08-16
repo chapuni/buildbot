@@ -176,6 +176,30 @@ class BuildRequestsConnectorComponent(base.DBConnectorComponent):
             transaction.commit()
         return self.db.pool.do(thd)
 
+    def setBuildIdforBuildRequests(self, brids, buildid):
+
+        def thd(conn):
+            transaction = conn.begin()
+            reqs_tbl = self.db.model.buildrequests
+            # we'll need to batch the brids into groups of 100, so that the
+            # parameter lists supported by the DBAPI aren't exhausted
+            for batch in self.doBatch(brids, 100):
+
+                q = reqs_tbl.update()
+                q = q.where(reqs_tbl.c.id.in_(batch))
+                res = conn.execute(q,
+                                   buildid=buildid)
+
+                # if an incorrect number of rows were updated, then we failed.
+                if res.rowcount != len(batch):
+                    log.msg("tried to complete %d buildrequests, "
+                            "but only completed %d" % (len(batch), res.rowcount))
+                    transaction.rollback()
+                    raise NotClaimedError
+            transaction.commit()
+
+        return self.db.pool.do(thd)
+
     def completeBuildRequests(self, brids, results, complete_at=None,
                               _reactor=reactor):
         assert results != RETRY, "a buildrequest cannot be completed with a retry status!"

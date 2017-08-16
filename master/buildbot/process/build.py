@@ -278,13 +278,18 @@ class Build(properties.PropertiesMixin, WorkerAPICompatMixin):
         self.build_status = build_status
         # TODO: this will go away when build collapsing is implemented; until
         # then we just assign the build to the first buildrequest
-        brid = self.requests[0].id
+        brids = [req.id for req in self.requests]
+        brid = brids[0]
+        assert brid == self.requests[0].id
         builderid = yield self.getBuilderId()
         self.buildid, self.number = \
             yield self.master.data.updates.addBuild(
                 builderid=builderid,
                 buildrequestid=brid,
                 workerid=worker.workerid)
+
+        # Record buildid to corresponding buildrequests.
+        yield self.master.data.updates.setBuildIdforBuildRequests(brids, self.buildid)
 
         self.stopBuildConsumer = yield self.master.mq.startConsuming(self.controlStopBuild,
                                                                      ("control", "builds",

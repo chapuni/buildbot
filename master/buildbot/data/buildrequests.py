@@ -216,6 +216,12 @@ class BuildRequest(base.ResourceType):
 
     @base.updateMethod
     @defer.inlineCallbacks
+    def setBuildIdforBuildRequests(self, brids, buildid):
+        if brids:
+            yield self.master.db.buildrequests.setBuildIdforBuildRequests(brids, buildid)
+
+    @base.updateMethod
+    @defer.inlineCallbacks
     def completeBuildRequests(self, brids, results, complete_at=None,
                               _reactor=reactor):
         assert results != RETRY, "a buildrequest cannot be completed with a retry status!"
