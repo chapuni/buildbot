@@ -115,7 +115,7 @@ class SourceStampsConnectorComponent(base.DBConnectorComponent):
             sstamps_tbl = self.db.model.sourcestamps
 
             from_clause = builds_tbl.join(reqs_tbl,
-                                          builds_tbl.c.buildrequestid == reqs_tbl.c.id)
+                                          builds_tbl.c.id == reqs_tbl.c.buildid)
             from_clause = from_clause.join(bsets_tbl,
                                            reqs_tbl.c.buildsetid == bsets_tbl.c.id)
             from_clause = from_clause.join(bsss_tbl,

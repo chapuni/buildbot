@@ -184,6 +184,7 @@ class BuildRequestsConnectorComponent(base.DBConnectorComponent):
             # we'll need to batch the brids into groups of 100, so that the
             # parameter lists supported by the DBAPI aren't exhausted
             for batch in self.doBatch(brids, 100):
+                log.msg(str(batch))
 
                 q = reqs_tbl.update()
                 q = q.where(reqs_tbl.c.id.in_(batch))
