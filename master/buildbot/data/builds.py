@@ -18,6 +18,7 @@ from __future__ import print_function
 from future.utils import iteritems
 
 from twisted.internet import defer
+from twisted.python import log
 
 from buildbot.data import base
 from buildbot.data import types
@@ -134,6 +135,9 @@ class BuildEndpoint(Db2DataMixin, base.BuildNestingMixin, base.Endpoint):
     def actionRebuild(self, args, kwargs):
         # we use the self.get and not self.data.get to be able to support all
         # the pathPatterns of this endpoint
+        log.msg("********actionRebuild")
+        log.msg(str(args))
+        log.msg(str(kwargs))
         build = yield self.get(ResultSpec(), kwargs)
         buildrequest = yield self.master.data.get(('buildrequests', build['buildrequestid']))
         res = yield self.master.data.updates.rebuildBuildrequest(buildrequest)

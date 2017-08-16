@@ -241,6 +241,7 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
     def addBuildsetForSourceStampsWithDefaults(self, reason, sourcestamps=None,
                                                waited_for=False, properties=None, builderNames=None,
                                                **kw):
+        log.msg("ForStampsDef")
         if sourcestamps is None:
             sourcestamps = []
 
@@ -301,6 +302,7 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
                               external_idstring=None, changeids=None, builderNames=None,
                               properties=None,
                               **kw):
+        log.msg("ForChanges")
         if changeids is None:
             changeids = []
         changesByCodebase = {}
@@ -344,6 +346,7 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
     def addBuildsetForSourceStamps(self, waited_for=False, sourcestamps=None,
                                    reason='', external_idstring=None, properties=None,
                                    builderNames=None, **kw):
+        log.msg("ForStamps")
         if sourcestamps is None:
             sourcestamps = []
         # combine properties
