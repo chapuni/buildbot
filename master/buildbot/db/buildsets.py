@@ -27,6 +27,7 @@ import sqlalchemy as sa
 
 from twisted.internet import defer
 from twisted.internet import reactor
+from twisted.python import log
 
 from buildbot.db import NULL
 from buildbot.db import base

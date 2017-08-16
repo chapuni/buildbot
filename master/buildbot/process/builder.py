@@ -30,7 +30,7 @@ from buildbot.data import resultspec
 from buildbot.process import buildrequest
 from buildbot.process import workerforbuilder
 from buildbot.process.build import Build
-from buildbot.process.results import RETRY
+from buildbot.process.results import FAILURE, RETRY
 from buildbot.util import service as util_service
 from buildbot.util import ascii2unicode
 from buildbot.util import epoch2datetime
@@ -355,6 +355,17 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         if wfb.worker:
             wfb.worker.releaseLocks()
+
+        if results == FAILURE:
+            log.msg("********FAILURE********")
+            log.msg(len(build.requests))
+            log.msg(str(build.sources))
+            for br in list(build.sources):
+                log.msg("<%s> %d" % (str(br.changes), len(br.changes)))
+                for ch in br.changes:
+                    log.msg("<%s>" % str(ch.who))
+            for ch in build.allChanges():
+                log.msg("<%s>" % str(ch.who))
 
     def _resubmit_buildreqs(self, build):
         brids = [br.id for br in build.requests]

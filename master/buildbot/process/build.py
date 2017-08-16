@@ -88,6 +88,10 @@ class Build(properties.PropertiesMixin, WorkerAPICompatMixin):
     _sentinel = []  # used as a sentinel to indicate unspecified initial_value
 
     def __init__(self, requests):
+        log.msg("********BUILD(%d)" % len(requests))
+        for req in requests:
+            log.msg("brid=%d" % req.id)
+
         self.requests = requests
         self.locks = []
         # build a source stamp

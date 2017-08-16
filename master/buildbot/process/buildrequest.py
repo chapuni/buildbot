@@ -22,6 +22,7 @@ from future.utils import text_type
 import calendar
 
 from twisted.internet import defer
+from twisted.python import log
 
 from buildbot.data import resultspec
 from buildbot.process import properties
@@ -46,6 +47,9 @@ class BuildRequestCollapser(object):
     def __init__(self, master, brids):
         self.master = master
         self.brids = brids
+        log.msg("********collapse.init(%d)" % len(brids))
+        for i in brids:
+            log.msg("====%d" % i)
 
     @defer.inlineCallbacks
     def _getUnclaimedBrs(self, builderid):
@@ -87,6 +91,7 @@ class BuildRequestCollapser(object):
                 canCollapse = yield collapseRequestsFn(self.master, bldr, br, unclaim_br)
                 if canCollapse is True:
                     brids.add(unclaim_br['buildrequestid'])
+                    log.msg("%d:%s" % (brid, str(brids)))
 
         brids = list(brids)
         if brids:
@@ -95,6 +100,7 @@ class BuildRequestCollapser(object):
             # complete the buildrequest with result SKIPPED.
             yield self.master.data.updates.completeBuildRequests(brids,
                                                                  SKIPPED)
+            log.msg("%d:%s:%s" % (self.brids[0], str(self.brids), str(brids)))
 
         defer.returnValue(brids)
 
