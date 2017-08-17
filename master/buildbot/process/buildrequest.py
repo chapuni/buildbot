@@ -95,6 +95,7 @@ class BuildRequestCollapser(object):
             # complete the buildrequest with result SKIPPED.
             yield self.master.data.updates.completeBuildRequests(brids,
                                                                  SKIPPED)
+            self.master.db.buildsets.collapseSourcestampsFromBuildrequest(self.brids[0], brids)
 
         defer.returnValue(brids)
 
