@@ -101,6 +101,7 @@ class BuildRequestCollapser(object):
             yield self.master.data.updates.completeBuildRequests(brids,
                                                                  SKIPPED)
             log.msg("%d:%s:%s" % (self.brids[0], str(self.brids), str(brids)))
+            self.master.db.buildsets.collapseSourcestampsFromBuildrequest(self.brids[0], brids)
 
         defer.returnValue(brids)
 
