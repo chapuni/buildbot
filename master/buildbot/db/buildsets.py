@@ -131,6 +131,35 @@ class BuildsetsConnectorComponent(base.DBConnectorComponent):
 
         defer.returnValue((bsid, brids))
 
+    def collapseSourcestampsFromBuildrequest(self, brid, brids):
+        def thd(conn):
+            bsss_tbl = self.db.model.buildset_sourcestamps
+            br_tbl = self.db.model.buildrequests
+
+            # Exclude duplicate pair.
+            bsss_2_tbl = bsss_tbl.alias()
+            br_2_tbl = br_tbl.alias()
+            sq2 = sa.select([bsss_2_tbl.c.sourcestampid])
+            sq2 = sq2.select_from(
+                bsss_2_tbl.join(br_2_tbl, (
+                    br_2_tbl.c.buildsetid == bsss_2_tbl.c.buildsetid)
+                    & (br_2_tbl.c.id == brid)))
+            sq2 = bsss_tbl.c.sourcestampid.notin_(sq2)
+
+            q = bsss_tbl.insert().from_select(
+                [bsss_tbl.c.buildsetid, bsss_tbl.c.sourcestampid],
+                sa.select([brid, bsss_tbl.c.sourcestampid]).select_from(
+                    bsss_tbl.join(
+                        br_tbl,
+                        (br_tbl.c.buildsetid == bsss_tbl.c.buildsetid)
+                        & (br_tbl.c.id.in_(brids)))).where(sq2)
+            )
+
+            res = conn.execute(q)
+            log.msg("QQQQQ(%d)<%s>" % (res.rowcount, str(q)))
+
+        return self.db.pool.do(thd)
+
     def completeBuildset(self, bsid, results, complete_at=None,
                          _reactor=reactor):
         if complete_at is not None:
