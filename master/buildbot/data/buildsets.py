@@ -44,16 +44,17 @@ class Db2DataMixin(object):
         buildset = bsdict.copy()
 
         # gather the actual sourcestamps, in parallel
-        sourcestamps = []
+        ss_dict = {}
 
         @defer.inlineCallbacks
         def getSs(ssid):
             ss = yield self.master.data.get(('sourcestamps', str(ssid)))
-            sourcestamps.append(ss)
+            ss_dict[ssid] = ss
         yield defer.DeferredList([getSs(id)
                                   for id in buildset['sourcestamps']],
                                  fireOnOneErrback=True, consumeErrors=True)
-        buildset['sourcestamps'] = sourcestamps
+        buildset['sourcestamps'] = [ss_dict[id]
+                                    for id in buildset['sourcestamps']]
 
         # minor modifications
         buildset['submitted_at'] = datetime2epoch(buildset['submitted_at'])
