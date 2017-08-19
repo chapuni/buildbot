@@ -174,44 +174,34 @@ class ChangesConnectorComponent(base.DBConnectorComponent):
     def getChangesForBuild(self, buildid):
         assert buildid > 0
 
-        gssfb = self.master.db.sourcestamps.getSourceStampsForBuild
-        changes = list()
-        currentBuild = yield self.master.db.builds.getBuild(buildid)
-        fromChanges, toChanges = dict(), dict()
-        ssBuild = yield gssfb(buildid)
-        for ss in ssBuild:
-            fromChanges[ss['codebase']] = yield self.getChangeFromSSid(ss['ssid'])
+        def thd(conn):
+            # Get SourceStamps for the build
+            builds_tbl = self.db.model.builds
+            reqs_tbl = self.db.model.buildrequests
+            bsets_tbl = self.db.model.buildsets
+            bsss_tbl = self.db.model.buildset_sourcestamps
+            sstamps_tbl = self.db.model.sourcestamps
+            changes_tbl = self.db.model.changes
 
-        # Get the last successful build on the same builder
-        previousBuild = yield self.master.db.builds.getPrevSuccessfulBuild(currentBuild['builderid'],
-                                                                           currentBuild[
-                                                                               'number'],
-                                                                           ssBuild)
-        if previousBuild:
-            for ss in (yield gssfb(previousBuild['id'])):
-                toChanges[ss['codebase']] = yield self.getChangeFromSSid(ss['ssid'])
-        else:
-            # If no successful previous build, then we need to catch all
-            # changes
-            for cb in fromChanges:
-                toChanges[cb] = {'changeid': None}
+            from_clause = builds_tbl.join(reqs_tbl,
+                                          builds_tbl.c.buildrequestid == reqs_tbl.c.id)
+            from_clause = from_clause.join(bsets_tbl,
+                                           reqs_tbl.c.buildsetid == bsets_tbl.c.id)
+            from_clause = from_clause.join(bsss_tbl,
+                                           bsets_tbl.c.id == bsss_tbl.c.buildsetid)
+            from_clause = from_clause.join(sstamps_tbl,
+                                           bsss_tbl.c.sourcestampid == sstamps_tbl.c.id)
+            from_clause = from_clause.join(changes_tbl,
+                                           changes_tbl.c.sourcestampid == sstamps_tbl.c.id)
 
-        # For each codebase, append changes until we match the parent
-        for cb, change in iteritems(fromChanges):
-            # Careful; toChanges[cb] may be None from getChangeFromSSid
-            toCbChange = toChanges.get(cb) or {}
-            if change and change['changeid'] != toCbChange.get('changeid'):
-                changes.append(change)
-                while ((toCbChange.get('changeid') not in change['parent_changeids']) and
-                       change['parent_changeids']):
-                    # For the moment, a Change only have 1 parent.
-                    change = yield self.master.db.changes.getChange(change['parent_changeids'][0])
-                    # http://trac.buildbot.net/ticket/3461 sometimes,
-                    # parent_changeids could be corrupted
-                    if change is None:
-                        break
-                    changes.append(change)
-        defer.returnValue(changes)
+            q = sa.select([changes_tbl]).select_from(
+                from_clause).where(builds_tbl.c.id == buildid)
+            res = conn.execute(q)
+            rows = [self._chdict_from_change_row_thd(conn, row)
+                    for row in res.fetchall()]
+            return rows
+
+        defer.returnValue((yield self.db.pool.do(thd)))
 
     def getChangeFromSSid(self, sourcestampid):
         assert sourcestampid >= 0
