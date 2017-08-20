@@ -247,8 +247,23 @@ class BuildRequest(object):
         assert bsdata[
             'sourcestamps'], "buildset must have at least one sourcestamp"
         buildrequest.sources = {}
+        buildrequest.sourcestamps = []
         for ssdata in bsdata['sourcestamps']:
             ss = buildrequest.sources[ssdata['codebase']] = TempSourceStamp(ssdata)
+            buildrequest.sourcestamps.append(ss)
+            ss.ssid = ssdata['ssid']
+            ss.branch = ssdata['branch']
+            ss.revision = ssdata['revision']
+            ss.repository = ssdata['repository']
+            ss.project = ssdata['project']
+            ss.codebase = ssdata['codebase']
+            if ssdata['patch']:
+                patch = ssdata['patch']
+                ss.patch = (patch['level'], patch['body'], patch['subdir'])
+                ss.patch_info = (patch['author'], patch['comment'])
+            else:
+                ss.patch = None
+                ss.patch_info = (None, None)
             changes = yield master.data.get(("sourcestamps", ss.ssid, "changes"))
             ss.changes = [TempChange(change) for change in changes]
 

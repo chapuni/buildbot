@@ -94,6 +94,8 @@ class Build(properties.PropertiesMixin, WorkerAPICompatMixin):
         self.sources = requests[0].mergeSourceStampsWith(requests[1:])
         self.reason = requests[0].mergeReasons(requests[1:])
 
+        self.sourcestamps = requests[-1].sourcestamps
+
         self.currentStep = None
         self.workerEnvironment = {}
         self.buildid = None
