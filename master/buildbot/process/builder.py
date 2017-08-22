@@ -89,6 +89,13 @@ class Builder(util_service.ReconfigurableServiceMixin,
         self.config = None
         self.builder_status = None
 
+        # Upstreams by name
+        self.upstreams = []
+
+        # Incomplete sourcestamps for dependent builds.
+        # They can be removed if a build is completed successfully.
+        self.incomplete_ssids = set()
+
         # Bisector
         self.bisect_ss = []
 
@@ -130,6 +137,12 @@ class Builder(util_service.ReconfigurableServiceMixin,
         new_workernames = set(builder_config.workernames)
         self.workers = [w for w in self.workers
                         if w.worker.workername in new_workernames]
+
+        self.upstreams = []
+        if builder_config.upstreams:
+            for bn in builder_config.upstreams:
+                if bn in self.master.botmaster.builders:
+                    self.upstreams.append(self.master.botmaster.builders[bn])
 
     def __repr__(self):
         return "<Builder '%r' at %d>" % (self.name, id(self))
@@ -358,6 +371,14 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         if wfb.worker:
             wfb.worker.releaseLocks()
+
+        if results in (SUCCESS, WARNINGS):
+            s = [ss.ssid for ss in build.sourcestamps]
+            self.incomplete_ssids.difference_update(s)
+            for ssid in sorted(self.incomplete_ssids):
+                if ssid > s[-1]:
+                    break
+                self.incomplete_ssids.remove(ssid)
 
         if self.bisect_ss and build.reason == 'bisect':
             if results == SUCCESS or results == WARNINGS:

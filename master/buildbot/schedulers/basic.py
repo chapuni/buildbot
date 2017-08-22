@@ -203,8 +203,11 @@ class BaseBasicScheduler(base.BaseScheduler):
             return
 
         changeids = sorted(classifications.keys())
-        yield self.addBuildsetForChanges(reason=self.reason,
-                                         changeids=changeids)
+        # Don't collapse changeids.
+        for changeid in changeids:
+            yield self.addBuildsetForChanges(
+                reason=self.reason,
+                changeids=[changeid])
 
         max_changeid = changeids[-1]  # (changeids are sorted)
         yield self.master.db.schedulers.flushChangeClassifications(

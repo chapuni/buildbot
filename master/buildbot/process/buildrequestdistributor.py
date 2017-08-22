@@ -15,6 +15,7 @@
 
 from __future__ import absolute_import
 from __future__ import print_function
+from future.utils import itervalues
 
 import random
 from datetime import datetime
@@ -29,6 +30,7 @@ from twisted.python.failure import Failure
 from buildbot.data import resultspec
 from buildbot.process import metrics
 from buildbot.process.buildrequest import BuildRequest
+from buildbot.process.results import SKIPPED
 from buildbot.util import epoch2datetime
 from buildbot.util import service
 
@@ -230,12 +232,64 @@ class BasicBuildChooser(BuildChooserBase):
             defer.returnValue(None)
             return
 
-        if self.nextBuild:
+        if True:
             # nextBuild expects BuildRequest objects
             breqs = yield self._getUnclaimedBuildRequests()
+            # Register unclaimed builds
+            for breq in breqs:
+                for ss in breq.sourcestamps:
+                    self.bldr.incomplete_ssids.add(ss.ssid)
+
             try:
-                nextBreq = yield self.nextBuild(self.bldr, breqs)
-                if nextBreq not in breqs:
+                nextBreqs = []
+                while len(breqs) > 0:
+                    if self.nextBuild:
+                        nextBreq = yield self.nextBuild(self.bldr, breqs)
+                    else:
+                        nextBreq = breqs[0]
+                    if nextBreq not in breqs:
+                        break
+                    assert nextBreq is not None and nextBreq.sourcestamps is not None
+                    # Suspend if upstreams don't complete it.
+                    for upstream_builder in self.bldr.upstreams:
+                        for ss in nextBreq.sourcestamps:
+                            if ss.ssid in upstream_builder.incomplete_ssids:
+                                nextBreq = None
+                                break
+                        if nextBreq is None:
+                            break
+                    if nextBreq is None:
+                        break
+                    # FIXME: Check if it may be collapsed.
+                    breqs.remove(nextBreq)
+                    if nextBreq not in nextBreqs:
+                        nextBreqs.append(nextBreq)
+
+                if len(nextBreqs) == 1:
+                    nextBreq = nextBreqs[0]
+                elif len(nextBreqs) > 1:
+                    brids = [br.id for br in nextBreqs]
+                    # FIXME: Use BuildRequestCollapser.
+                    yield self.master.data.updates.claimBuildRequests(brids[0:-1])
+                    yield self.master.data.updates.completeBuildRequests(brids[0:-1], SKIPPED)
+                    self.master.db.buildsets.collapseSourcestampsFromBuildrequest(brids[-1], brids[0:-1])
+                    msg = yield self.master.data.get(
+                        ('buildsets', nextBreqs[-1].bsid)
+                    )
+                    #self.master.data.produceEvent("buildsets", msg, "new")
+                    # ('buildsets', '182', 'builders', '6', 'buildrequests', '182', 'claimed')>
+                    self.master.mq.produce(('buildsets', str(msg["bsid"]), "update"), msg)
+                    collapsed_ss=[]
+                    for breq in nextBreqs:
+                        for ss in collapsed_ss:
+                            if ss in breq.sourcestamps:
+                                breq.sourcestamps.remove(ss)
+                        collapsed_ss += breq.sourcestamps
+                    nextBreqs[-1].sourcestamps = collapsed_ss
+                    for breq in nextBreqs[0:-1]:
+                        self._removeBuildRequest(breq)
+                    nextBreq = nextBreqs[-1]
+                else:
                     nextBreq = None
             except Exception:
                 log.err(Failure(),

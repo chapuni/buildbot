@@ -972,6 +972,7 @@ class BuilderConfig(util_config.ConfiguredMixin, WorkerAPICompatMixin):
                  nextWorker=None, nextBuild=None, locks=None, env=None,
                  properties=None, collapseRequests=None, description=None,
                  canStartBuild=None,
+                 upstreams=None,
 
                  slavename=None,  # deprecated, use `workername` instead
                  slavenames=None,  # deprecated, use `workernames` instead
@@ -1119,6 +1120,9 @@ class BuilderConfig(util_config.ConfiguredMixin, WorkerAPICompatMixin):
         self.collapseRequests = collapseRequests
 
         self.description = description
+
+        # FIXME: Check it.
+        self.upstreams = upstreams
 
     def getConfigDict(self):
         # note: this method will disappear eventually - put your smarts in the

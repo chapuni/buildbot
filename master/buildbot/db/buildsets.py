@@ -102,6 +102,7 @@ class BuildsetsConnectorComponent(base.DBConnectorComponent):
                 conn.execute(bs_props_tbl.insert(), inserts)
 
             # add sourcestamp ids
+            q = self.db.model.buildset_sourcestamps.insert()
             r = conn.execute(self.db.model.buildset_sourcestamps.insert(),
                              [dict(buildsetid=bsid, sourcestampid=ssid)
                               for ssid in sourcestampids])

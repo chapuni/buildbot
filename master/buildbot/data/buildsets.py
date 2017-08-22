@@ -158,8 +158,6 @@ class Buildset(base.ResourceType):
             submitted_at=epoch2datetime(submitted_at),
             parent_buildid=parent_buildid, parent_relationship=parent_relationship)
 
-        yield BuildRequestCollapser(self.master, list(itervalues(brids))).collapse()
-
         # get each of the sourcestamps for this buildset (sequentially)
         bsdict = yield self.master.db.buildsets.getBuildset(bsid)
         sourcestamps = []
