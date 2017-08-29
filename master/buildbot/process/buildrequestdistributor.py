@@ -246,7 +246,19 @@ class BasicBuildChooser(BuildChooserBase):
                     if self.nextBuild:
                         nextBreq = yield self.nextBuild(self.bldr, breqs)
                     else:
+                        # Seek bis first.
+                        bisBreq = None
+                        for breq in breqs:
+                            if breq.reason == 'bisect':
+                                bisBreq = breq
+                                break
+
+                        if bisBreq is not None:
+                            # Issue the first bis breq
+                            breqs = [bisBreq]
+
                         nextBreq = breqs[0]
+
                     if nextBreq not in breqs:
                         break
                     assert nextBreq is not None and nextBreq.sourcestamps is not None
