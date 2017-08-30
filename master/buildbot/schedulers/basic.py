@@ -208,10 +208,21 @@ class BaseBasicScheduler(base.BaseScheduler):
         if not classifications:  # pragma: no cover
             return
 
+        # Suspend builders
+        builders = [self.master.botmaster.builders[bn] for bn in self.builderNames]
+        for brd in builders:
+            brd.suspended = True
+
         changeids = sorted(classifications.keys())
         # Don't collapse changeids.
         for changeid in changeids:
+            # Resume at the last item.
+            if changeid==changeids[-1]:
+                for brd in builders:
+                    brd.suspended = False
+
             yield self.addBuildsetForChanges(
+                builderNames = self.builderNames,
                 reason=self.reason,
                 changeids=[changeid])
 

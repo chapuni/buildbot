@@ -265,6 +265,12 @@ class BasicBuildChooser(BuildChooserBase):
             for breq in excluded_breqs:
                 self._removeBuildRequest(breq)
 
+        # If suspended,
+        if self.bldr.suspended:
+            log.msg("********bldrid=%d:suspended" % self.bldr._builderid)
+            defer.returnValue(None)
+            return
+
         # all_change is responsible to propagate invalid_changeids.
         self.bldr.all_changeids -= self.bldr.invalidated_changeids
         self.bldr.invalidated_changeids = set()

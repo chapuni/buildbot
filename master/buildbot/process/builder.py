@@ -117,6 +117,9 @@ class Builder(util_service.ReconfigurableServiceMixin,
         # It should not be empty, assuming set() <= min are all completed.
         self.completed_changeids = set([-1])
 
+        # Suspend for hack
+        self.suspended = False
+
     @defer.inlineCallbacks
     def reconfigServiceWithBuildbotConfig(self, new_config):
         # find this builder in the config
