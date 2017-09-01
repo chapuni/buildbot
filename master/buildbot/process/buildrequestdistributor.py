@@ -277,6 +277,31 @@ class BasicBuildChooser(BuildChooserBase):
                     if nextBreq not in nextBreqs:
                         nextBreqs.append(nextBreq)
 
+                # Avoid dubious ssids
+                dubious_ssids = set()
+                for ssids in self.bldr.dubious_ssids.values():
+                    dubious_ssids |= ssids
+                dubious_ssids = sorted(list(dubious_ssids))
+                if dubious_ssids and nextBreqs:
+                    ssids = sorted(set([ss.ssid for breq in nextBreqs for ss in breq.sourcestamps]))
+                    for i in reversed(range(len(nextBreqs))):
+                        if dubious_ssids[0] <= ssids[i] and ssids[i] <= dubious_ssids[-1]:
+                            # Remove tail-contiguous breq
+                            nextBreqs.pop(i)
+                            continue
+                        # Prune unneeded ssids in dubious_ssids
+                        # FIXME: How could it done if upstreams doesn't have it?
+                        #   For now, let it issued.
+                        for builder,builder_ssids in self.bldr.dubious_ssids.items():
+                            builder_ssids.difference_update(ssids)
+                            for ssid in list(builder_ssids):
+                                if ssid <= ssids[i]:
+                                    builder_ssids.discard(ssid)
+                        break
+                    dubious_ssids = set()
+                    for ssids in self.bldr.dubious_ssids.values():
+                        dubious_ssids |= ssids
+
                 if len(nextBreqs) == 1:
                     nextBreq = nextBreqs[0]
                 elif len(nextBreqs) > 1:

@@ -92,12 +92,19 @@ class Builder(util_service.ReconfigurableServiceMixin,
         # Upstreams
         self.upstreams = set()
 
+        # Downstreams (calculated by upstreams)
+        self.downstreams = set()
+
         # Incomplete sourcestamps for dependent builds.
         # They can be removed if a build is completed successfully.
         self.incomplete_ssids = set()
 
         # Bisector
         self.bisect_ss = []
+
+        # Dubious ssdis (per upstream builder).
+        # They might be failures or hidde-failures.
+        self.dubious_ssids = {}
 
     @defer.inlineCallbacks
     def reconfigServiceWithBuildbotConfig(self, new_config):
@@ -144,6 +151,14 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 # FIXME: Check nonexist bn
                 builder = self.master.botmaster.builders[bn]
                 self.upstreams.add(builder)
+
+                # Prepare dubious_ssids
+                if builder not in self.dubious_ssids:
+                    self.dubious_ssids[builder] = set()
+
+                # Register downstream
+                # FIXME: Is it reconfigurable?
+                builder.downstreams.add(self)
 
     def __repr__(self):
         return "<Builder '%r' at %d>" % (self.name, id(self))
@@ -376,10 +391,27 @@ class Builder(util_service.ReconfigurableServiceMixin,
         if results in (SUCCESS, WARNINGS):
             s = [ss.ssid for ss in build.sourcestamps]
             self.incomplete_ssids.difference_update(s)
+            fFailToSucc = False
             for ssid in sorted(self.incomplete_ssids):
                 if ssid > s[-1]:
                     break
+                # It means Fail->Succ
+                fFailToSucc = True
                 self.incomplete_ssids.remove(ssid)
+
+            for builder in self.downstreams:
+                if fFailToSucc:
+                    # Add ssids but s[-1], since it may be successful.
+                    builder.dubious_ssids[self] |= set(s[0:-1])
+                else:
+                    # Prune ever.
+                    for ssid in list(builder.dubious_ssids[self]):
+                        if ssid <= s[-1]:
+                            builder.dubious_ssids[self].discard(ssid)
+
+        else:
+            for builder in self.downstreams:
+                builder.dubious_ssids[self] |= set([ss.ssid for ss in build.sourcestamps])
 
         if self.bisect_ss and build.reason == 'bisect':
             if results == SUCCESS or results == WARNINGS:
