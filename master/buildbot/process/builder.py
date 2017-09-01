@@ -89,8 +89,8 @@ class Builder(util_service.ReconfigurableServiceMixin,
         self.config = None
         self.builder_status = None
 
-        # Upstreams by name
-        self.upstreams = []
+        # Upstreams
+        self.upstreams = set()
 
         # Incomplete sourcestamps for dependent builds.
         # They can be removed if a build is completed successfully.
@@ -138,11 +138,12 @@ class Builder(util_service.ReconfigurableServiceMixin,
         self.workers = [w for w in self.workers
                         if w.worker.workername in new_workernames]
 
-        self.upstreams = []
+        self.upstreams = set()
         if builder_config.upstreams:
             for bn in builder_config.upstreams:
-                if bn in self.master.botmaster.builders:
-                    self.upstreams.append(self.master.botmaster.builders[bn])
+                # FIXME: Check nonexist bn
+                builder = self.master.botmaster.builders[bn]
+                self.upstreams.add(builder)
 
     def __repr__(self):
         return "<Builder '%r' at %d>" % (self.name, id(self))
