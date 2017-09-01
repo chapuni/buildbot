@@ -232,6 +232,12 @@ class BasicBuildChooser(BuildChooserBase):
             defer.returnValue(None)
             return
 
+        # Suppress build if upstreams are working
+        for builder in self.bldr.getWholeUpstreams():
+            if builder.building:
+                defer.returnValue(None)
+                return
+
         if True:
             # nextBuild expects BuildRequest objects
             breqs = yield self._getUnclaimedBuildRequests()

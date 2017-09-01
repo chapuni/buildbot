@@ -92,6 +92,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         # Upstreams
         self.upstreams = set()
+        self.whole_upstreams = None
 
         # Downstreams (calculated by upstreams)
         self.downstreams = set()
@@ -160,6 +161,20 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 # Register downstream
                 # FIXME: Is it reconfigurable?
                 builder.downstreams.add(self)
+
+        self.whole_upstreams = None
+
+    def getWholeUpstreams(self):
+        if self.whole_upstreams is not None:
+            return self.whole_upstreams
+
+        self.whole_upstreams = set()
+        for builder in self.upstreams:
+            if builder not in self.whole_upstreams:
+                self.whole_upstreams.add(builder)
+                self.whole_upstreams |= builder.getWholeUpstreams()
+
+        return self.whole_upstreams
 
     def __repr__(self):
         return "<Builder '%r' at %d>" % (self.name, id(self))
