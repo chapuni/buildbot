@@ -388,6 +388,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
         if wfb.worker:
             wfb.worker.releaseLocks()
 
+        fSuccToFail = False
         if results in (SUCCESS, WARNINGS):
             s = [ss.ssid for ss in build.sourcestamps]
             self.incomplete_ssids.difference_update(s)
@@ -410,6 +411,10 @@ class Builder(util_service.ReconfigurableServiceMixin,
                             builder.dubious_ssids[self].discard(ssid)
 
         else:
+            if len(build.sourcestamps) > 0 and min(self.incomplete_ssids) == min([ss.ssid for ss in build.sourcestamps]):
+                fSuccToFail = True
+                log.msg("********SUCC->FAIL %s" % self.name)
+
             for builder in self.downstreams:
                 builder.dubious_ssids[self] |= set([ss.ssid for ss in build.sourcestamps])
 
@@ -430,7 +435,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
             else:
                 log.msg("********BISECT: Results is <%s>. Aborting." % str(results))
                 self.bisect_ss = []
-        elif results == FAILURE and not self.bisect_ss and len(build.sourcestamps) >= 1:
+        elif results == FAILURE and fSuccToFail and not self.bisect_ss and len(build.sourcestamps) >= 1:
             log.msg("********FAILURE: START BISECT********(%d)" % len(build.sourcestamps))
             self.bisect_ss = build.sourcestamps
 
