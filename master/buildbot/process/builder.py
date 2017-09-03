@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from future.utils import string_types
 
+import re
 import warnings
 import weakref
 
@@ -388,6 +389,21 @@ class Builder(util_service.ReconfigurableServiceMixin,
         if wfb.worker:
             wfb.worker.releaseLocks()
 
+        # Invalidate ssids in sourcestamps and incomplete_ssids.
+        invalidated_ssid = build.getProperty("invalidated_ssid")
+        invalidated_ssids = set()
+        if invalidated_ssid is not None:
+            log.msg("invalidated_ssid=<%s>" % invalidated_ssid)
+            m = re.match(r'^(\d+)\.\.(\d+)$', invalidated_ssid)
+            if m:
+                ssid_min = int(m.group(1))
+                ssid_max = int(m.group(2))
+                for ss in list(build.sourcestamps):
+                    if ssid_min <= ss.ssid and ss.ssid <= ssid_max:
+                        build.sourcestamps.remove(ss)
+                        invalidated_ssids.add(ss.ssid)
+                        log.msg("Invalidate ssid(%d)" % ss.ssid)
+
         fSuccToFail = False
         if results in (SUCCESS, WARNINGS):
             s = [ss.ssid for ss in build.sourcestamps]
@@ -411,7 +427,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
                             builder.dubious_ssids[self].discard(ssid)
 
         else:
-            if len(build.sourcestamps) > 0 and min(self.incomplete_ssids) == min([ss.ssid for ss in build.sourcestamps]):
+            if len(build.sourcestamps) > 0 and min(self.incomplete_ssids.difference(invalidated_ssids)) == min([ss.ssid for ss in build.sourcestamps]):
                 fSuccToFail = True
                 log.msg("********SUCC->FAIL %s" % self.name)
 
