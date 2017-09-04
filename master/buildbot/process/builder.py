@@ -97,16 +97,25 @@ class Builder(util_service.ReconfigurableServiceMixin,
         # Downstreams (calculated by upstreams)
         self.downstreams = set()
 
-        # Incomplete sourcestamps for dependent builds.
-        # They can be removed if a build is completed successfully.
-        self.incomplete_ssids = set()
-
         # Bisector
         self.bisect_ss = []
 
-        # Dubious ssdis (per upstream builder).
-        # They might be failures or hidde-failures.
-        self.dubious_ssids = {}
+        # Invalidated by changesource.
+        # This can be cleaned when complete.
+        # FIXME: Integrate to other suppressions.
+        self.invalidated_changeids = set()
+
+        # Changeids by scheduler.
+        # This just receives changeid from base scheduler.
+        self.all_changeids = set()
+
+        # Interest changeids
+        # They will be pruned in the actual buildrequest.
+        self.incompleted_changeids = set()
+
+        # Completed changeids
+        # It should not be empty, assuming set() <= min are all completed.
+        self.completed_changeids = set([-1])
 
     @defer.inlineCallbacks
     def reconfigServiceWithBuildbotConfig(self, new_config):
@@ -153,10 +162,6 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 # FIXME: Check nonexist bn
                 builder = self.master.botmaster.builders[bn]
                 self.upstreams.add(builder)
-
-                # Prepare dubious_ssids
-                if builder not in self.dubious_ssids:
-                    self.dubious_ssids[builder] = set()
 
                 # Register downstream
                 # FIXME: Is it reconfigurable?
@@ -375,6 +380,49 @@ class Builder(util_service.ReconfigurableServiceMixin,
                                   self.config.properties[propertyname],
                                   "Builder")
 
+    def computeAvailableChangeids(self, changeids):
+        # all_changeids is trimmed by invalidated_changeids.
+        self.incompleted_changeids &= self.all_changeids
+        self.completed_changeids &= self.all_changeids
+        changeids &= self.all_changeids
+        if not self.upstreams:
+            return changeids
+
+        # Collect upstream changids
+        any_completed_changeids = set()
+        any_incompleted_changeids = set()
+        for upbldr in self.upstreams:
+            any_incompleted_changeids |= upbldr.incompleted_changeids
+            completed = set(upbldr.completed_changeids)
+            if completed and self.all_changeids:
+                # Fill [builder.all : upd.completed)
+                completed |= set(range(min(self.all_changeids), min(completed)))
+            any_completed_changeids |= completed
+
+        any_incompleted_changeids &= self.all_changeids
+        any_completed_changeids &= self.all_changeids
+
+        completed = False
+        max_changeid = None
+        for chid in reversed(sorted(self.all_changeids)):
+            # Not interested in incomplete changes
+            if any_incompleted_changeids and chid >= min(any_incompleted_changeids):
+                continue
+            if chid in changeids and max_changeid is None:
+                max_changeid = chid
+            if chid in any_completed_changeids and max_changeid is not None:
+                break
+
+        if max_changeid is None:
+            return set()
+
+        result_changeids = set()
+        for chid in sorted(changeids):
+            if chid > max_changeid:
+                break
+            result_changeids.add(chid)
+        return result_changeids
+
     def buildFinished(self, build, wfb):
         """This is called when the Build has finished (either success or
         failure). Any exceptions during the build are reported with
@@ -404,50 +452,41 @@ class Builder(util_service.ReconfigurableServiceMixin,
         if wfb.worker:
             wfb.worker.releaseLocks()
 
-        # Invalidate ssids in sourcestamps and incomplete_ssids.
-        invalidated_ssid = build.getProperty("invalidated_ssid")
-        invalidated_ssids = set()
-        if invalidated_ssid is not None:
-            log.msg("invalidated_ssid=<%s>" % invalidated_ssid)
-            m = re.match(r'^(\d+)\.\.(\d+)$', invalidated_ssid)
-            if m:
-                ssid_min = int(m.group(1))
-                ssid_max = int(m.group(2))
-                for ss in list(build.sourcestamps):
-                    if ssid_min <= ss.ssid and ss.ssid <= ssid_max:
-                        build.sourcestamps.remove(ss)
-                        invalidated_ssids.add(ss.ssid)
-                        log.msg("Invalidate ssid(%d)" % ss.ssid)
+        log.msg("********builder:buildFinished (%d:%s)" % (self._builderid, self.name))
+        changeids = set([ch.changeid for ss in build.sourcestamps for ch in ss.changes])
 
         fSuccToFail = False
         if results in (SUCCESS, WARNINGS):
-            s = [ss.ssid for ss in build.sourcestamps]
-            self.incomplete_ssids.difference_update(s)
-            fFailToSucc = False
-            for ssid in sorted(self.incomplete_ssids):
-                if ssid > s[-1]:
-                    break
-                # It means Fail->Succ
-                fFailToSucc = True
-                self.incomplete_ssids.remove(ssid)
-
-            for builder in self.downstreams:
+            if changeids:
+                # Detect Fail->Succ
+                fFailToSucc = (min(changeids) > min(self.incompleted_changeids))
+                max_changeid = max(changeids)
                 if fFailToSucc:
-                    # Add ssids but s[-1], since it may be successful.
-                    builder.dubious_ssids[self] |= set(s[0:-1])
+                    log.msg("********FAIL->SUCC %s" % self.name)
+                    # Just complete the last change.
+                    self.completed_changeids.add(max_changeid)
                 else:
-                    # Prune ever.
-                    for ssid in list(builder.dubious_ssids[self]):
-                        if ssid <= s[-1]:
-                            builder.dubious_ssids[self].discard(ssid)
+                    # Complete whole changes
+                    self.completed_changeids -= changeids
+                    self.completed_changeids.add(max_changeid)
+                    if self.completed_changeids and min(self.completed_changeids) < max_changeid:
+                        for ch in list(self.completed_changeids):
+                            if ch < max_changeid:
+                                self.completed_changeids.discard(ch)
 
-        else:
-            if len(build.sourcestamps) > 0 and min(self.incomplete_ssids.difference(invalidated_ssids)) == min([ss.ssid for ss in build.sourcestamps]):
+                # Prune all_changeids and incompleted_changeids
+                self.all_changeids -= changeids
+                if  self.all_changeids and min(self.all_changeids) < max_changeid:
+                    for ch in list(self.all_changeids):
+                        if ch < max_changeid:
+                            self.all_changeids.discard(ch)
+                self.incompleted_changeids &= self.all_changeids
+            else:
+                log.msg("changeid is null")
+        else: # FAIL or exception.
+            if changeids and min(self.incompleted_changeids) == min(changeids):
                 fSuccToFail = True
                 log.msg("********SUCC->FAIL %s" % self.name)
-
-            for builder in self.downstreams:
-                builder.dubious_ssids[self] |= set([ss.ssid for ss in build.sourcestamps])
 
         if self.bisect_ss and build.reason == 'bisect':
             if results == SUCCESS or results == WARNINGS:

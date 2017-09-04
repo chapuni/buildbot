@@ -129,6 +129,12 @@ class BaseBasicScheduler(base.BaseScheduler):
 
     @util.deferredLocked('_stable_timers_lock')
     def gotChange(self, change, important):
+        # Push the change
+        if important:
+            for bn in self.builderNames:
+                builder = self.master.botmaster.builders[bn]
+                builder.incompleted_changeids.add(change.number)
+
         if not self.treeStableTimer:
             # if there's no treeStableTimer, we can completely ignore
             # unimportant changes

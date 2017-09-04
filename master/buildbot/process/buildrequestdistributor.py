@@ -15,7 +15,6 @@
 
 from __future__ import absolute_import
 from __future__ import print_function
-from future.utils import itervalues
 
 import random
 from datetime import datetime
@@ -232,27 +231,75 @@ class BasicBuildChooser(BuildChooserBase):
             defer.returnValue(None)
             return
 
+        # nextBuild expects BuildRequest objects
+        breqs = yield self._getUnclaimedBuildRequests()
+
         # Suppress build if upstreams are working
         for builder in self.bldr.getWholeUpstreams():
             if builder.building:
                 defer.returnValue(None)
                 return
 
-        if True:
-            # nextBuild expects BuildRequest objects
-            breqs = yield self._getUnclaimedBuildRequests()
-            # Register unclaimed builds
-            for breq in breqs:
-                for ss in breq.sourcestamps:
-                    self.bldr.incomplete_ssids.add(ss.ssid)
+        # Extract chids from breqs
+        excluded_breqs = set()
+        changeids = set()
+        for breq in breqs:
+            for ss in breq.sourcestamps:
+                for ch in ss.changes:
+                    if ch.changeid in self.bldr.invalidated_changeids:
+                        excluded_breqs.add(breq)
+                    else:
+                        changeids.add(ch.changeid)
 
+        assert not (changeids & self.bldr.invalidated_changeids)
+
+        # Prune changes and breqs with invalidated_ssid.
+        if excluded_breqs:
+            excluded_brids = [br.id for br in excluded_breqs]
+            log.msg("Prune breqs<%s>" % str(excluded_brids))
+            yield self.master.data.updates.claimBuildRequests(excluded_brids)
+            try:
+                yield self.master.data.updates.completeBuildRequests(excluded_brids, SKIPPED)
+            except NotClaimedError:
+                log.msg("NotClaimedError may be ignored.")
+            for breq in excluded_breqs:
+                self._removeBuildRequest(breq)
+
+        # all_change is responsible to propagate invalid_changeids.
+        self.bldr.all_changeids -= self.bldr.invalidated_changeids
+        self.bldr.invalidated_changeids = set()
+
+        if True:
+            builder = self.bldr
+
+            # Restrict changes along upstream.
+            changeids = builder.computeAvailableChangeids(changeids)
+
+            def filter_breqs(breq):
+                for ss in breq.sourcestamps:
+                    f = True
+                    for ch in ss.changes:
+                        if ch.changeid in changeids:
+                            assert f, "The ss has split changes!"
+                        else:
+                            f = False
+                        if not f:
+                            return False
+                return True
+
+            # filter breqs
+            breqs = list(filter(filter_breqs, breqs))
+
+            # Map changeids to breqs
+            nextBreqs = []
             try:
                 nextBreqs = []
-                while len(breqs) > 0:
+                while breqs:
                     if self.nextBuild:
                         nextBreq = yield self.nextBuild(self.bldr, breqs)
                     else:
                         # Seek bis first.
+                        # FIXME: Seek bis last, and bis may be cancelled.
                         bisBreq = None
                         for breq in breqs:
                             if breq.reason == 'bisect':
@@ -266,47 +313,15 @@ class BasicBuildChooser(BuildChooserBase):
                         nextBreq = breqs[0]
 
                     if nextBreq not in breqs:
+                        if nextBreq is not None:
+                            log.msg("Unexpected nextBreq: %s" % str(nextBreq))
+                        nextBreq = None
                         break
+
                     assert nextBreq is not None and nextBreq.sourcestamps is not None
-                    # Suspend if upstreams don't complete it.
-                    for upstream_builder in self.bldr.upstreams:
-                        for ss in nextBreq.sourcestamps:
-                            if ss.ssid in upstream_builder.incomplete_ssids:
-                                nextBreq = None
-                                break
-                        if nextBreq is None:
-                            break
-                    if nextBreq is None:
-                        break
-                    # FIXME: Check if it may be collapsed.
                     breqs.remove(nextBreq)
                     if nextBreq not in nextBreqs:
                         nextBreqs.append(nextBreq)
-
-                # Avoid dubious ssids
-                dubious_ssids = set()
-                for ssids in self.bldr.dubious_ssids.values():
-                    dubious_ssids |= ssids
-                dubious_ssids = sorted(list(dubious_ssids))
-                if dubious_ssids and nextBreqs:
-                    ssids = sorted(set([ss.ssid for breq in nextBreqs for ss in breq.sourcestamps]))
-                    for i in reversed(range(len(nextBreqs))):
-                        if dubious_ssids[0] <= ssids[i] and ssids[i] <= dubious_ssids[-1]:
-                            # Remove tail-contiguous breq
-                            nextBreqs.pop(i)
-                            continue
-                        # Prune unneeded ssids in dubious_ssids
-                        # FIXME: How could it done if upstreams doesn't have it?
-                        #   For now, let it issued.
-                        for builder,builder_ssids in self.bldr.dubious_ssids.items():
-                            builder_ssids.difference_update(ssids)
-                            for ssid in list(builder_ssids):
-                                if ssid <= ssids[i]:
-                                    builder_ssids.discard(ssid)
-                        break
-                    dubious_ssids = set()
-                    for ssids in self.bldr.dubious_ssids.values():
-                        dubious_ssids |= ssids
 
                 if len(nextBreqs) == 1:
                     nextBreq = nextBreqs[0]
@@ -319,8 +334,6 @@ class BasicBuildChooser(BuildChooserBase):
                     msg = yield self.master.data.get(
                         ('buildsets', nextBreqs[-1].bsid)
                     )
-                    #self.master.data.produceEvent("buildsets", msg, "new")
-                    # ('buildsets', '182', 'builders', '6', 'buildrequests', '182', 'claimed')>
                     self.master.mq.produce(('buildsets', str(msg["bsid"]), "update"), msg)
                     collapsed_ss=[]
                     for breq in nextBreqs:

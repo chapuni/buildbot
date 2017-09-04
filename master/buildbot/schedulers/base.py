@@ -19,6 +19,8 @@ from future.utils import integer_types
 from future.utils import iteritems
 from future.utils import string_types
 
+import re
+
 from twisted.internet import defer
 from twisted.python import failure
 from twisted.python import log
@@ -198,6 +200,37 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
         # get a change object, since the API requires it
         chdict = yield self.master.db.changes.getChange(msg['changeid'])
         change = yield changes.Change.fromChdict(self.master, chdict)
+
+        # Get invalidated_changeids for builders.
+        invalidated_changeids = set()
+        if "properties" in chdict and "invalidated_changes" in chdict["properties"]:
+            m = re.match(r'^(\d+)\.\.(\d+)$', chdict["properties"]["invalidated_changes"][0])
+            if m:
+                invalidated_changeids |= set(range(int(m.group(1)), int(m.group(2)) + 1))
+
+        # Push changeid and invalidated_ ssids to every builder
+        if invalidated_changeids:
+            n = 0
+            for builder in self.master.botmaster.builders.values():
+                if builder.invalidated_changeids >= invalidated_changeids:
+                    break;
+                builder.invalidated_changeids |= invalidated_changeids
+                n += 1
+
+        i = 0
+        n = 0
+        for bn in self.builderNames:
+            builder = self.master.botmaster.builders[bn]
+            n += 1
+
+            # Push the *raw* change.
+            # Basic scheduler is responsible to makr it as important change.
+            builder.all_changeids.add(chdict["changeid"])
+
+            # Push invalidated_changeids
+            if invalidated_changeids and builder.invalidated_changeids < invalidated_changeids:
+                builder.invalidated_changeids |= invalidated_changeids
+                i += 1
 
         # filter it
         if change_filter and not change_filter.filter_change(change):
