@@ -265,6 +265,8 @@ class Contact(service.AsyncService):
     def getRevisionsForBuild(self, bdict):
         # FIXME: Need to get revision info! (build -> buildreq -> buildset ->
         # sourcestamps)
+        if False:
+            yield 0
         defer.returnValue(["TODO"])
 
     def convertTime(self, seconds):
