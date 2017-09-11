@@ -285,6 +285,8 @@ class _PropertyMap(object):
         properties = self.properties()
         assert properties is not None
 
+        rv = None
+
         def colon_minus(mo):
             # %(prop:-repl)s
             # if prop exists, use it; otherwise, use repl
