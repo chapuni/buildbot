@@ -62,6 +62,11 @@ class State extends Config
                 name: 'collapseRevisions'
                 caption: 'Collapse changes by revision'
                 default_value: true
+            ,
+                type: 'bool'
+                name: 'showSingleBuild'
+                caption: 'Show single build by change'
+                default_value: true
             ]
 
 class Console extends Controller
@@ -73,6 +78,7 @@ class Console extends Controller
         @changeLimit = settings.changeLimit.value
         @showAllRevisionsInBuild = settings.showAllRevisionsInBuild.value
         @collapseRevisions = settings.collapseRevisions.value
+        @showSingleBuild = settings.showSingleBuild.value
         @dataAccessor = dataService.open().closeOnDestroy(@$scope)
         @_infoIsExpanded = {}
         @$scope.all_builders = @all_builders = @dataAccessor.getBuilders()
@@ -332,7 +338,16 @@ class Console extends Controller
                     style.partial = true
                 builderInChange.style[build.buildid] = style
 
-                builderInChange.builds.push(build)
+                if @showSingleBuild
+                    if builderInChange.builds.length == 0
+                        builderInChange.builds = [build]
+                    else
+                        prevbuild = builderInChange.builds[0]
+                        prevpartial = builderInChange.style[prevbuild.buildid].partial
+                        if prevbuild.buildid < build.buildid
+                            builderInChange.builds = [build]
+                else
+                    builderInChange.builds.push(build)
 
     makeFakeChange: (codebase, revision, when_timestamp) =>
         change = @changesBySSID[revision]
