@@ -51,13 +51,13 @@ class BaseHookHandler(object):
         # first, convert files, links and properties
         files = None
         if args.get(b'files'):
-            files = json.loads(args.get(b'files')[0])
+            files = json.loads(args.get(b'files')[0].decode())
         else:
             files = []
 
         properties = None
         if args.get(b'properties'):
-            properties = json.loads(args.get(b'properties')[0])
+            properties = json.loads(args.get(b'properties')[0].decode())
         else:
             properties = {}
 
