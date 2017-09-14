@@ -57,6 +57,11 @@ class State extends Config
                 name: 'showAllRevisionsInBuild'
                 caption: 'Show all revisions in each build'
                 default_value: true
+            ,
+                type: 'bool'
+                name: 'collapseRevisions'
+                caption: 'Collapse changes by revision'
+                default_value: true
             ]
 
 class Console extends Controller
@@ -67,6 +72,7 @@ class Console extends Controller
         @buildLimit = settings.buildLimit.value
         @changeLimit = settings.changeLimit.value
         @showAllRevisionsInBuild = settings.showAllRevisionsInBuild.value
+        @collapseRevisions = settings.collapseRevisions.value
         @dataAccessor = dataService.open().closeOnDestroy(@$scope)
         @_infoIsExpanded = {}
         @$scope.all_builders = @all_builders = @dataAccessor.getBuilders()
@@ -102,29 +108,48 @@ class Console extends Controller
 
     _onChange: =>
         @onchange_debounce = undefined
-        # we only display builders who actually have builds
         for build in @builds
             @all_builders.get(build.builderid).hasBuild = true
 
         @sortBuildersByTags(@all_builders)
 
         @changesBySSID ?= {}
+        @revisions ?= []
+        @changesByRevision ?= {}
+        tmp_revisions = []
         for change in @changes
             if change.comments
                 change.subject = change.comments.split("\n")[0]
             @changesBySSID[change.sourcestamp.ssid] = change
+            revision = change.revision
+            change.dispkey = if @collapseRevisions then revision else change.sourcestamp.ssid
+            if not (revision of @changesByRevision)
+                # @changes is expected to be reverse order.
+                tmp_revisions.push(revision)
+                @changesByRevision[revision] = [change]
+            else
+                # [0] should be oldest, since I have to show "not-reverted" change files.
+                @changesByRevision[revision].unshift(change)
             @populateChange(change)
 
+        # Make sure @revisions is reverse order, since @changes was reverse order.
+        @revisions = tmp_revisions.concat(@revisions)
 
         for build in @builds
             @matchBuildWithChange(build)
 
         @filtered_changes = []
-        for ssid, change of @changesBySSID
-            for builder in change.builders
-                if builder.builds.length > 0
-                    @filtered_changes.push(change)
-                    break
+        if @collapseRevisions
+            for revision in @revisions
+                @filtered_changes.push(@changesByRevision[revision][0])
+        else
+            # we only display builders who actually have builds
+            for ssid, change of @changesBySSID
+                for builder in change.builders
+                    if builder.builds.length > 0
+                        @filtered_changes.push(change)
+                        break
+
     ###
     # Sort builders by tags
     # Buildbot eight has the category option, but it was only limited to one category per builder,
@@ -281,7 +306,12 @@ class Console extends Controller
                     if not @showAllRevisionsInBuild
                         continue
 
-                change = @changesBySSID[sourcestamp.ssid]
+                if not (sourcestamp.revision of @changesByRevision)
+                    change = null
+                else if @collapseRevisions
+                    change = @changesByRevision[sourcestamp.revision][0]
+                else
+                    change = @changesBySSID[sourcestamp.ssid]
 
                 if not change? and build.properties?.got_revision?
                     rev = build.properties.got_revision[0]
