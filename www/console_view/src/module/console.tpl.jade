@@ -26,8 +26,7 @@
                 changedetails(change="change")
             td.column(ng-repeat="builder in change.builders"
                       title="{{builder.name}}")
-                a(ng-repeat="build in builder.builds | orderBy: ['number']")
+                a(ng-repeat="build in builder.builds | orderBy: ['number']" ng-click='$event.preventDefault();c.selectBuild(build)' ui-sref="build({builder: builder.builderid, build: build.number})" style="outline-style:none")
                     span.badge-status(ng-if='build.buildid'
-                                  ng-class="c.results2class(build, 'pulse')"
-                                  ng-click='c.selectBuild(build)')
+                                  ng-class="c.results2class(build, 'pulse')")
                         | {{ build.number }}
