@@ -104,6 +104,8 @@ class Console extends Controller
 
         @changesBySSID ?= {}
         for change in @changes
+            if change.comments
+                change.subject = change.comments.split("\n")[0]
             @changesBySSID[change.sourcestamp.ssid] = change
             @populateChange(change)
 
@@ -113,8 +115,6 @@ class Console extends Controller
 
         @filtered_changes = []
         for ssid, change of @changesBySSID
-            if change.comments
-                change.subject = change.comments.split("\n")[0]
             for builder in change.builders
                 if builder.builds.length > 0
                     @filtered_changes.push(change)
