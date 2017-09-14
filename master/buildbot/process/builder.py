@@ -30,7 +30,7 @@ from buildbot.data import resultspec
 from buildbot.process import buildrequest
 from buildbot.process import workerforbuilder
 from buildbot.process.build import Build
-from buildbot.process.results import RETRY
+from buildbot.process.results import SUCCESS, WARNINGS, FAILURE, RETRY
 from buildbot.util import service as util_service
 from buildbot.util import ascii2unicode
 from buildbot.util import epoch2datetime
@@ -88,6 +88,9 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         self.config = None
         self.builder_status = None
+
+        # Bisector
+        self.bisect_ss = []
 
     @defer.inlineCallbacks
     def reconfigServiceWithBuildbotConfig(self, new_config):
@@ -355,6 +358,81 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         if wfb.worker:
             wfb.worker.releaseLocks()
+
+        if self.bisect_ss and build.reason == 'bisect':
+            if results == SUCCESS or results == WARNINGS:
+                # Prune successful sourcestamps (in head)
+                a = []
+                s = set([ss.ssid for ss in build.sourcestamps])
+                for ss in self.bisect_ss:
+                    if ss.ssid not in s:
+                        a.append(ss)
+                self.bisect_ss = a
+                log.msg("********BISECT/SUCC, pruning %d, left %d" % (len(s), len(self.bisect_ss)))
+            elif results == FAILURE:
+                # Overwrite blamelist with the last build
+                self.bisect_ss = build.sourcestamps
+                log.msg("********BISECT/FAIL, left %d" % len(self.bisect_ss))
+            else:
+                log.msg("********BISECT: Results is <%s>. Aborting." % str(results))
+                self.bisect_ss = []
+        elif results == FAILURE and not self.bisect_ss and len(build.sourcestamps) >= 1:
+            log.msg("********FAILURE: START BISECT********(%d)" % len(build.sourcestamps))
+            self.bisect_ss = build.sourcestamps
+
+        if self.bisect_ss:
+            blamelist = []
+            last_who = ''
+
+            # Construct consequent blamelist
+            for ss in self.bisect_ss:
+                assert len(ss.changes) >= 1
+                # Assuming change is one in each ss.
+                ch = ss.changes[0]
+                if last_who != ch.who:
+                    last_who = ch.who
+                    blamelist.append([])
+                blamelist[-1].append(ss)
+
+            # Construct the next build
+            assert len(blamelist) > 0
+            next_bisect_ss = []
+            if len(blamelist) > 1:
+                # Bisect by author
+                n = (len(blamelist) + 1) // 2
+                for bu in blamelist[0:n]:
+                    next_bisect_ss += bu
+                log.msg("BISECTING by AUTHORS: %d" % len(next_bisect_ss))
+            else:
+                ss = blamelist[0]
+                assert len(ss) > 0
+                if len(ss) > 1:
+                    # Bisect by ss
+                    n = (len(ss) + 1) // 2
+                    next_bisect_ss = ss[0:n]
+                    log.msg("BISECTING by ss: %d" % len(next_bisect_ss))
+                elif results in (SUCCESS, WARNINGS):
+                    # Run the one ss to confirm BAD.
+                    next_bisect_ss = ss
+                    log.msg("BISECTING(CONRIFM) by ss: %d" % len(next_bisect_ss))
+                else:
+                    log.msg("BISECTING, COMPLETE -- no need to run any more")
+                    self.bisect_ss = []
+
+            ssids = [ss.ssid for ss in next_bisect_ss]
+            if len(ssids) > 0:
+                self._submit_ssids(ssids, [build.requests[0].builderid])
+        else:
+            log.msg("---- not bis")
+
+    @defer.inlineCallbacks
+    def _submit_ssids(self, ssids, builderids):
+        res = yield self.master.data.updates.addBuildset(
+            waited_for=False, scheduler=u'bisect',
+            sourcestamps=ssids, reason=u'bisect',
+            builderids = builderids,
+        )
+        defer.returnValue(res)
 
     def _resubmit_buildreqs(self, build):
         brids = [br.id for br in build.requests]
