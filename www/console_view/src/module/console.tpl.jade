@@ -32,10 +32,14 @@
                         | {{change.author_name}}
                 td.column(ng-repeat="builder in change.builders"
                           title="{{builder.name}}")
-                    a(ng-repeat="build in builder.builds | orderBy: ['number']" ng-click='$event.preventDefault();c.selectBuild(build)' ui-sref="build({builder: builder.builderid, build: build.number})" style="outline-style:none")
+                    a(ng-repeat="build in builder.builds | orderBy: ['number']"
+                          ng-click='$event.preventDefault();c.selectBuild(build)'
+                          ui-sref="build({builder: builder.builderid, build: build.number})"
+                          ng-class="{partial: builder.style[build.buildid]['partial']]}"
+                          style="outline-style:none")
                         span.badge-status(ng-if='build.buildid'
                                       ng-class="c.results2class(build, 'pulse')")
-                            | {{ build.number }}
+                            | {{ builder.style[build.buildid]['label'] }}
             tr
                 td(colspan="{{1 + change.builders.length}}")
                     changedetails(change="change" compact="true")

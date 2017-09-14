@@ -52,6 +52,11 @@ class State extends Config
                 name: 'changeLimit'
                 caption: 'Number of changes to fetch'
                 default_value: 30
+            ,
+                type: 'bool'
+                name: 'showAllRevisionsInBuild'
+                caption: 'Show all revisions in each build'
+                default_value: true
             ]
 
 class Console extends Controller
@@ -61,6 +66,7 @@ class Console extends Controller
         settings = bbSettingsService.getSettingsGroup('Console')
         @buildLimit = settings.buildLimit.value
         @changeLimit = settings.changeLimit.value
+        @showAllRevisionsInBuild = settings.showAllRevisionsInBuild.value
         @dataAccessor = dataService.open().closeOnDestroy(@$scope)
         @_infoIsExpanded = {}
         @$scope.all_builders = @all_builders = @dataAccessor.getBuilders()
@@ -250,7 +256,7 @@ class Console extends Controller
         change.builders = []
         change.buildersById = {}
         for builder in @builders
-            builder = builderid: builder.builderid, name: builder.name, builds: []
+            builder = builderid: builder.builderid, name: builder.name, style: {}, builds: []
             change.builders.push(builder)
             change.buildersById[builder.builderid] = builder
     ###
@@ -264,22 +270,39 @@ class Console extends Controller
         if not buildset?
             return
         if  buildset? and buildset.sourcestamps?
+            last_ss = null
             for sourcestamp in buildset.sourcestamps
+                if (not last_ss?) or (last_ss.ssid < sourcestamp.ssid)
+                    last_ss = sourcestamp
+            if not last_ss
+                return
+            for sourcestamp in buildset.sourcestamps
+                if sourcestamp.ssid != last_ss.ssid
+                    if not @showAllRevisionsInBuild
+                        continue
+
                 change = @changesBySSID[sourcestamp.ssid]
 
-        if not change? and build.properties?.got_revision?
-            rev = build.properties.got_revision[0]
-            # got_revision can be per codebase or just the revision string
-            if typeof(rev) == "string"
-                change = @makeFakeChange("", rev, build.started_at)
-            else
-                for codebase, revision of rev
-                    change = @makeFakeChange(codebase, revision, build.started_at)
+                if not change? and build.properties?.got_revision?
+                    rev = build.properties.got_revision[0]
+                    # got_revision can be per codebase or just the revision string
+                    if typeof(rev) == "string"
+                        change = @makeFakeChange("", rev, build.started_at)
+                    else
+                        for codebase, revision of rev
+                            change = @makeFakeChange(codebase, revision, build.started_at)
 
-        if not change?
-            change = @makeFakeChange("unknown codebase", "unknown revision")
+                if not change?
+                    change = @makeFakeChange("unknown codebase", "unknown revision")
 
-        change.buildersById[build.builderid].builds.push(build)
+                builderInChange = change.buildersById[build.builderid]
+
+                style = {label: build.number, partial: false}
+                if sourcestamp.ssid != last_ss.ssid
+                    style.partial = true
+                builderInChange.style[build.buildid] = style
+
+                builderInChange.builds.push(build)
 
     makeFakeChange: (codebase, revision, when_timestamp) =>
         change = @changesBySSID[revision]
