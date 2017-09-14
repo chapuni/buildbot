@@ -10,9 +10,18 @@ class DataProcessor extends Service
 
         groupid = -1
         last = groupid: 0, time: 0
+
         # Create empty builds array for all the builders
         for builder in builders
             builder.builds = []
+
+        # Let "now" max value in builds
+        # FIXME: Use server time?
+        now = Math.round(new Date() / 1000)
+        for build in builds
+            now = build.started_at  if build.started_at?  && now < build.started_at
+            now = build.complete_at if build.complete_at? && now < build.complete_at
+
         for build in builds
             builder = builders.get(build.builderid)
             if not builder? or not builder.builds
@@ -27,7 +36,7 @@ class DataProcessor extends Service
             if last.groupid isnt groupid
                 groups[last.groupid].max = last.time
 
-            if not build.complete then build.complete_at = Math.round(new Date() / 1000)
+            if not build.complete then build.complete_at = now
             build.groupid = last.groupid = groupid
             builder = builders.get(build.builderid)
             builder.builds.push(build)
