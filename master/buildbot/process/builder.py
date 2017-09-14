@@ -386,10 +386,17 @@ class Builder(util_service.ReconfigurableServiceMixin,
                                   "Builder")
 
     def computeAvailableChangeids(self, changeids):
+        log.msg("********computeAvailableChangeids(%s ch=%s)" % (self.name, str(changeids)))
+        log.msg("all: %s" % str(self.all_changeids))
+        log.msg("inc: %s" % str(self.incompleted_changeids))
+        log.msg("com: %s" % str(self.completed_changeids))
         # all_changeids is trimmed by invalidated_changeids.
         self.incompleted_changeids &= self.all_changeids
         self.completed_changeids &= self.all_changeids
         changeids &= self.all_changeids
+        log.msg("all: %s" % str(self.all_changeids))
+        log.msg("inc: %s" % str(self.incompleted_changeids))
+        log.msg("com: %s" % str(self.completed_changeids))
         if not self.upstreams:
             return changeids
 
@@ -397,6 +404,8 @@ class Builder(util_service.ReconfigurableServiceMixin,
         any_completed_changeids = set()
         any_incompleted_changeids = set()
         for upbldr in self.upstreams:
+            if upbldr.incompleted_changeids:
+                log.msg("inc<%s>: %s" % (upbldr.name, str(upbldr.incompleted_changeids)))
             any_incompleted_changeids |= upbldr.incompleted_changeids
             completed = set(upbldr.completed_changeids)
             if completed and self.all_changeids:
@@ -407,14 +416,21 @@ class Builder(util_service.ReconfigurableServiceMixin,
         any_incompleted_changeids &= self.all_changeids
         any_completed_changeids &= self.all_changeids
 
+        log.msg("anycom: %s" % str(any_incompleted_changeids))
+        log.msg("anyinc: %s" % str(any_completed_changeids))
+
         completed = False
         max_changeid = None
         for chid in reversed(sorted(self.all_changeids)):
             # Not interested in incomplete changes
             if any_incompleted_changeids and chid >= min(any_incompleted_changeids):
+                log.msg("chid:-%d" % chid)
                 continue
             if chid in changeids and max_changeid is None:
                 max_changeid = chid
+                log.msg("chid:+%d %d" % (chid, max_changeid))
+            else:
+                log.msg("chid: %d" % chid)
             if chid in any_completed_changeids and max_changeid is not None:
                 break
 
@@ -460,6 +476,11 @@ class Builder(util_service.ReconfigurableServiceMixin,
         log.msg("********builder:buildFinished (%d:%s)" % (self._builderid, self.name))
         changeids = set([ch.changeid for ss in build.sourcestamps for ch in ss.changes])
 
+        log.msg("chs %s" % changeids)
+        log.msg("all %s" % self.all_changeids)
+        log.msg("inc %s" % self.incompleted_changeids)
+        log.msg("com %s" % self.completed_changeids)
+
         # all_changeids is trimmed by invalidated_changeids.
         self.incompleted_changeids &= self.all_changeids
         self.completed_changeids &= self.all_changeids
@@ -468,6 +489,11 @@ class Builder(util_service.ReconfigurableServiceMixin,
         self.bisect_ss = list(filter(
             lambda ss: (len(ss.changes) > 0 and ss.changes[0].changeid in self.all_changeids),
             self.bisect_ss))
+
+        log.msg("chs %s" % changeids)
+        log.msg("all %s" % self.all_changeids)
+        log.msg("inc %s" % self.incompleted_changeids)
+        log.msg("com %s" % self.completed_changeids)
 
         fSuccToFail = False
         result_edge = "unknown"
@@ -519,7 +545,10 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 s = set([ss.ssid for ss in build.sourcestamps])
                 for ss in self.bisect_ss:
                     if ss.ssid not in s:
+                        log.msg("add %d" % ss.ssid)
                         a.append(ss)
+                    else:
+                        log.msg("--- %d" % ss.ssid)
                 self.bisect_ss = a
                 log.msg("********BISECT/SUCC, pruning %d, left %d" % (len(s), len(self.bisect_ss)))
                 props.setProperty("bisect", "succ(%d)" % len(self.bisect_ss), "Builder")
@@ -537,6 +566,11 @@ class Builder(util_service.ReconfigurableServiceMixin,
             self.bisect_ss = build.sourcestamps
             self.bisect_who = None
             props.setProperty("bisect", "start(%d)" % len(build.sourcestamps), "Builder")
+
+        log.msg("chs %s" % changeids)
+        log.msg("all %s" % self.all_changeids)
+        log.msg("inc %s" % self.incompleted_changeids)
+        log.msg("com %s" % self.completed_changeids)
 
         if self.bisect_ss:
             blamelist = []
@@ -563,6 +597,9 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 # Bisect by author
                 n = (len(blamelist) + 1) // 2
                 for bu in blamelist[0:n]:
+                    log.msg("Who <%s> (%d)" % (bu[-1].changes[0].who, len(bu)))
+                    for ss in bu:
+                        log.msg("  ss=%d ch=%d who=%s" % (ss.ssid, ss.changes[0].changeid, ss.changes[0].who))
                     next_bisect_ss += bu
                 log.msg("BISECTING by AUTHORS: %d" % len(next_bisect_ss))
             else:
@@ -604,6 +641,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
                     self.bisect_ss = []
 
             ssids = [ss.ssid for ss in next_bisect_ss]
+            log.msg("**ssids=%s" % str(ssids))
             if len(ssids) > 0:
                 self._submit_ssids(ssids, [build.requests[0].builderid])
         else:
@@ -701,6 +739,7 @@ class BuilderControl:
         for brdict in brdicts:
             br = yield buildrequest.BuildRequest.fromBrdict(
                 self.control.master, brdict)
+            log.msg("br: sslen=%d" % len(br.sources))
             buildrequests.append(br)
 
         # and return the corresponding control objects

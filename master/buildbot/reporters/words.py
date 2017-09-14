@@ -555,6 +555,7 @@ class Contact(service.AsyncService):
         #props = yield self.master.db.builds.getBuildProperties(build['buildid'])
         #props = yield self.master.data.get(('builds',build['buildid'],'properties'))
         props = getattr(self.master.botmaster.builders[builderName], "build_props", {})
+        log.msg("================IRC<%s>" % props.getProperty("result_edge"))
 
         msg = None
         bisect = props.getProperty("bisect")

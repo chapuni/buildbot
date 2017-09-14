@@ -173,6 +173,7 @@ class ChangesConnectorComponent(base.DBConnectorComponent):
     @defer.inlineCallbacks
     def getChangesForBuild(self, buildid):
         assert buildid > 0
+        log.msg("buildid=%d" % buildid)
 
         def thd(conn):
             # Get SourceStamps for the build
@@ -199,6 +200,7 @@ class ChangesConnectorComponent(base.DBConnectorComponent):
             res = conn.execute(q)
             rows = [self._chdict_from_change_row_thd(conn, row)
                     for row in res.fetchall()]
+            log.msg("rows=%d" % len(rows))
             return rows
 
         defer.returnValue((yield self.db.pool.do(thd)))

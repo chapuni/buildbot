@@ -134,6 +134,7 @@ class BaseBasicScheduler(base.BaseScheduler):
             for bn in self.builderNames:
                 builder = self.master.botmaster.builders[bn]
                 builder.incompleted_changeids.add(change.number)
+                log.msg("================basic.changes<%s> Pushed ch %d" % (bn, change.number))
 
         if not self.treeStableTimer:
             # if there's no treeStableTimer, we can completely ignore

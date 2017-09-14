@@ -216,10 +216,15 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
                     break;
                 builder.invalidated_changeids |= invalidated_changeids
                 n += 1
+            if n > 0:
+                log.msg("================Push invalidates(%d) %s" % (n, str(invalidated_changeids)))
+            else:
+                log.msg("----------------Push none")
 
         i = 0
         n = 0
         for bn in self.builderNames:
+            log.msg("================scheduler.changes<%s>" % bn)
             builder = self.master.botmaster.builders[bn]
             n += 1
 
@@ -231,6 +236,9 @@ class BaseScheduler(ClusteredBuildbotService, StateMixin):
             if invalidated_changeids and builder.invalidated_changeids < invalidated_changeids:
                 builder.invalidated_changeids |= invalidated_changeids
                 i += 1
+                log.msg("================(%d/%d) Push invalidates %s" % (i, n, str(invalidated_changeids)))
+            else:
+                log.msg("----------------(  %d) Push none" % n)
 
         # filter it
         if change_filter and not change_filter.filter_change(change):

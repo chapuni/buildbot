@@ -225,6 +225,8 @@ class BasicBuildChooser(BuildChooserBase):
 
     @defer.inlineCallbacks
     def _getNextUnclaimedBuildRequest(self):
+        log.msg("********_getNextUnclaimedBuildRequest (%d:%s)" % (self.bldr._builderid, self.bldr.name))
+
         # ensure the cache is there
         yield self._fetchUnclaimedBrdicts()
         if not self.unclaimedBrdicts:
@@ -277,6 +279,7 @@ class BasicBuildChooser(BuildChooserBase):
 
         if True:
             builder = self.bldr
+            log.msg("********nb:breqs=%d %s ch=%s" % (len(breqs), builder.name, str(changeids)))
 
             # Restrict changes along upstream.
             changeids = builder.computeAvailableChangeids(changeids)
@@ -295,12 +298,14 @@ class BasicBuildChooser(BuildChooserBase):
 
             # filter breqs
             breqs = list(filter(filter_breqs, breqs))
+            log.msg("********nb:breqs=%s" % str(breqs))
 
             # Map changeids to breqs
             nextBreqs = []
             try:
                 nextBreqs = []
                 while breqs:
+                    log.msg("********nb<%s>" % str([br.id for br in nextBreqs]))
                     if self.nextBuild:
                         nextBreq = yield self.nextBuild(self.bldr, breqs)
                     else:
@@ -325,6 +330,7 @@ class BasicBuildChooser(BuildChooserBase):
                         break
 
                     assert nextBreq is not None and nextBreq.sourcestamps is not None
+                    log.msg("nextBreq is %d" % nextBreq.id)
                     breqs.remove(nextBreq)
                     if nextBreq not in nextBreqs:
                         nextBreqs.append(nextBreq)
@@ -333,6 +339,7 @@ class BasicBuildChooser(BuildChooserBase):
                     nextBreq = nextBreqs[0]
                 elif len(nextBreqs) > 1:
                     brids = [br.id for br in nextBreqs]
+                    log.msg("********Collapse next issues <%s>" % str(brids))
                     # FIXME: Use BuildRequestCollapser.
                     yield self.master.data.updates.claimBuildRequests(brids[0:-1])
                     yield self.master.data.updates.completeBuildRequests(brids[0:-1], SKIPPED)

@@ -18,6 +18,7 @@ from __future__ import print_function
 
 from twisted.internet import defer
 from twisted.internet import reactor
+from twisted.python import log
 
 from buildbot.data import base
 from buildbot.data import types
@@ -257,6 +258,7 @@ class BuildRequest(base.ResourceType):
         buildset = yield self.master.data.get(('buildsets', buildrequest['buildsetid']))
         properties = yield self.master.data.get(('buildsets', buildrequest['buildsetid'], 'properties'))
         ssids = [ss['ssid'] for ss in buildset['sourcestamps']]
+        log.msg("rebuildBuildreq: %d" % len(ssids))
         res = yield self.master.data.updates.addBuildset(waited_for=False, scheduler=u'rebuild',
                                                          sourcestamps=ssids, reason=u'rebuild',
                                                          properties=properties, builderids=[
