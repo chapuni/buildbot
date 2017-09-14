@@ -70,4 +70,29 @@
         text-align: left;
         white-space: pre;
     }
+
+    // For customized console table: tbody...
+    tbody+tbody {
+        border-width: 4px;
+        border-style: inset;
+        border-color: darkgray;
+    }
+
+    .table-striped {
+      > tbody:nth-child(even) > tr {
+        > td,
+        > th {
+          background-color: inherit
+        }
+      }
+    }
+
+    .table-striped {
+      > tbody:nth-child(odd) > tr {
+        > td,
+        > th {
+          background-color: #f9f9f9;
+        }
+      }
+    }
 }

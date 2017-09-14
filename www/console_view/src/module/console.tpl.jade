@@ -21,12 +21,21 @@
             td.row-header
             td(ng-repeat="tag in tag_line" colspan="{{tag.colspan}}")
                 span(uib-tooltip='{{ tag.tag }}' ng-style='{width: tag.colspan*50}') {{tag.tag}}
-        tr(ng-repeat="change in c.filtered_changes | orderBy: ['-changeid'] track by change.changeid")
-            td
-                changedetails(change="change")
-            td.column(ng-repeat="builder in change.builders"
-                      title="{{builder.name}}")
-                a(ng-repeat="build in builder.builds | orderBy: ['number']" ng-click='$event.preventDefault();c.selectBuild(build)' ui-sref="build({builder: builder.builderid, build: build.number})" style="outline-style:none")
-                    span.badge-status(ng-if='build.buildid'
-                                  ng-class="c.results2class(build, 'pulse')")
-                        | {{ build.number }}
+        tbody(ng-repeat="change in c.filtered_changes | orderBy: ['-changeid'] track by change.changeid")
+            tr
+                td
+                    a.files(ng-href="{{change.revlink}}", uib-tooltip='{{change.files.join("\n")}}' tooltip-placement='right')
+                        | {{change.revision}}:&nbsp;
+                    .change-avatar(ng-if="change.author_email")
+                        img(ng-src="avatar?email={{change.author_email}}")
+                    span(uib-tooltip="{{change.author_email}}")
+                        | {{change.author_name}}
+                td.column(ng-repeat="builder in change.builders"
+                          title="{{builder.name}}")
+                    a(ng-repeat="build in builder.builds | orderBy: ['number']" ng-click='$event.preventDefault();c.selectBuild(build)' ui-sref="build({builder: builder.builderid, build: build.number})" style="outline-style:none")
+                        span.badge-status(ng-if='build.buildid'
+                                      ng-class="c.results2class(build, 'pulse')")
+                            | {{ build.number }}
+            tr
+                td(colspan="{{1 + change.builders.length}}")
+                    changedetails(change="change" compact="true")

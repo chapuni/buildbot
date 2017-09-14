@@ -3,9 +3,9 @@ div.changedetails(style="width:100%;")
         .change-avatar(ng-if="!compact && change.author_email")
             a(ng-href="mailto:{{change.author_email}}", title="{{change.author_name}}")
                 img(ng-src="avatar?email={{change.author_email}}")
-        a(ng-if="change.revlink", ng-href="{{change.revlink}}", uib-tooltip="{{change.comments}}")
+        a(ng-if="!compact && change.revlink", ng-href="{{change.revlink}}", uib-tooltip="{{change.comments}}")
             | {{ change.comments.split("\n")[0] }}
-        span(ng-if="!change.revlink", uib-tooltip="{{change.comments}}")
+        span(ng-if="compact || !change.revlink", uib-tooltip="{{change.comments}}" style="margin-left: 6em")
             | {{ change.comments.split("\n")[0] }}
         span(ng-if="!compact" uib-tooltip="{{change.when_timestamp | dateformat:'LLL'}}")
             | ({{ change.when_timestamp | timeago }})
