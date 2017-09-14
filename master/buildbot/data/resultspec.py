@@ -286,6 +286,16 @@ class ResultSpec(object):
             reverse = True
             o = o[1:]
         col = self.findColumn(query, o)
+
+        # Hack to builds.complete_at
+        if o == "complete_at" and str(col.table) == "builds":
+            col = sa.sql.expression.case(
+                (
+                    (col == None, 2100000000),
+                ),
+                else_=col
+            )
+
         if reverse:
             col = col.desc()
         return query.order_by(col)
