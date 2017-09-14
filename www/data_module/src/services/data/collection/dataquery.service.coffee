@@ -60,8 +60,14 @@ class DataQuery extends Factory
                     return (a, b) ->
                         if reverse then [a, b] = [b, a]
 
-                        if a[property] < b[property] then -1
-                        else if a[property] > b[property] then 1
+                        an = a[property]
+                        bn = b[property]
+                        if property == "complete_at"
+                            an = 2100000000 if !an? && property=="complete_at"
+                            bn = 2100000000 if !bn? && property=="complete_at"
+
+                        if an < bn then -1
+                        else if an > bn then 1
                         else 0
                 if angular.isString(order)
                     array.sort compare(order)
