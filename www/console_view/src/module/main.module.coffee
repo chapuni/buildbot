@@ -123,6 +123,7 @@ class Console extends Controller
         @revisions ?= []
         @changesByRevision ?= {}
         tmp_revisions = []
+        need_sort = false
         for change in @changes
             if change.comments
                 change.subject = change.comments.split("\n")[0]
@@ -133,6 +134,8 @@ class Console extends Controller
                 # @changes is expected to be reverse order.
                 tmp_revisions.push(revision)
                 @changesByRevision[revision] = [change]
+                if (not revision.startsWith('r')) or revision.length > 8
+                    need_sort = true
             else
                 # [0] should be oldest, since I have to show "not-reverted" change files.
                 @changesByRevision[revision].unshift(change)
@@ -140,6 +143,8 @@ class Console extends Controller
 
         # Make sure @revisions is reverse order, since @changes was reverse order.
         @revisions = tmp_revisions.concat(@revisions)
+        if need_sort
+            @revisions = @revisions.sort().reverse()
 
         for build in @builds
             @matchBuildWithChange(build)
