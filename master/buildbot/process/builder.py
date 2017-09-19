@@ -459,6 +459,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
         changeids = set([ch.changeid for ss in build.sourcestamps for ch in ss.changes])
 
         fSuccToFail = False
+        result_edge = "unknown"
         if results in (SUCCESS, WARNINGS):
             if changeids:
                 # Detect Fail->Succ
@@ -468,7 +469,9 @@ class Builder(util_service.ReconfigurableServiceMixin,
                     log.msg("********FAIL->SUCC %s" % self.name)
                     # Just complete the last change.
                     self.completed_changeids.add(max_changeid)
+                    result_edge = "fail2succ"
                 else:
+                    result_edge = "succ"
                     # Complete whole changes
                     self.completed_changeids -= changeids
                     self.completed_changeids.add(max_changeid)
@@ -490,6 +493,12 @@ class Builder(util_service.ReconfigurableServiceMixin,
             if changeids and min(self.incompleted_changeids) == min(changeids):
                 fSuccToFail = True
                 log.msg("********SUCC->FAIL %s" % self.name)
+                result_edge = "succ2fail(%d)" % len(build.sourcestamps)
+            else:
+                result_edge = "fail"
+
+        props = build.getProperties()
+        props.setProperty("result_edge", result_edge, "Builder")
 
         if self.bisect_ss and build.reason == 'bisect':
             if results == SUCCESS or results == WARNINGS:
@@ -501,16 +510,21 @@ class Builder(util_service.ReconfigurableServiceMixin,
                         a.append(ss)
                 self.bisect_ss = a
                 log.msg("********BISECT/SUCC, pruning %d, left %d" % (len(s), len(self.bisect_ss)))
+                props.setProperty("bisect", "succ(%d)" % len(self.bisect_ss), "Builder")
             elif results == FAILURE:
                 # Overwrite blamelist with the last build
                 self.bisect_ss = build.sourcestamps
                 log.msg("********BISECT/FAIL, left %d" % len(self.bisect_ss))
+                props.setProperty("bisect", "fail(%d)" % len(self.bisect_ss), "Builder")
             else:
                 log.msg("********BISECT: Results is <%s>. Aborting." % str(results))
+                props.setProperty("bisect", "abort", "Builder")
                 self.bisect_ss = []
         elif results == FAILURE and fSuccToFail and not self.bisect_ss and len(build.sourcestamps) >= 1:
             log.msg("********FAILURE: START BISECT********(%d)" % len(build.sourcestamps))
             self.bisect_ss = build.sourcestamps
+            self.bisect_who = None
+            props.setProperty("bisect", "start(%d)" % len(build.sourcestamps), "Builder")
 
         if self.bisect_ss:
             blamelist = []
@@ -537,6 +551,9 @@ class Builder(util_service.ReconfigurableServiceMixin,
                 log.msg("BISECTING by AUTHORS: %d" % len(next_bisect_ss))
             else:
                 ss = blamelist[0]
+                if self.bisect_who is None:
+                    self.bisect_who = ss[0].changes[0].who
+                    props.setProperty("blamed", self.bisect_who, "Builder")
                 assert len(ss) > 0
                 if len(ss) > 1:
                     # Bisect by ss
@@ -549,6 +566,8 @@ class Builder(util_service.ReconfigurableServiceMixin,
                     log.msg("BISECTING(CONRIFM) by ss: %d" % len(next_bisect_ss))
                 else:
                     log.msg("BISECTING, COMPLETE -- no need to run any more")
+                    ss = self.bisect_ss[0]
+                    props.setProperty("blamed", ss.changes[0].who, "Builder")
                     self.bisect_ss = []
 
             ssids = [ss.ssid for ss in next_bisect_ss]
@@ -557,6 +576,8 @@ class Builder(util_service.ReconfigurableServiceMixin,
         else:
             log.msg("---- not bis")
 
+        self._flushProperties(build)
+
     @defer.inlineCallbacks
     def _submit_ssids(self, ssids, builderids):
         res = yield self.master.data.updates.addBuildset(
@@ -564,6 +585,12 @@ class Builder(util_service.ReconfigurableServiceMixin,
             sourcestamps=ssids, reason=u'bisect',
             builderids = builderids,
         )
+        defer.returnValue(res)
+
+    @defer.inlineCallbacks
+    def _flushProperties(self, build):
+        # `results` is just passed on to the next callback
+        res = yield self.master.data.updates.setBuildProperties(build.buildid, build)
         defer.returnValue(res)
 
     def _resubmit_buildreqs(self, build):
