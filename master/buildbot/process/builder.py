@@ -458,6 +458,15 @@ class Builder(util_service.ReconfigurableServiceMixin,
         log.msg("********builder:buildFinished (%d:%s)" % (self._builderid, self.name))
         changeids = set([ch.changeid for ss in build.sourcestamps for ch in ss.changes])
 
+        # all_changeids is trimmed by invalidated_changeids.
+        self.incompleted_changeids &= self.all_changeids
+        self.completed_changeids &= self.all_changeids
+
+        # Prune bisect_ss along all_changes.
+        self.bisect_ss = list(filter(
+            lambda ss: (len(ss.changes) > 0 and ss.changes[0].changeid in self.all_changeids),
+            self.bisect_ss))
+
         fSuccToFail = False
         result_edge = "unknown"
         if results in (SUCCESS, WARNINGS):
