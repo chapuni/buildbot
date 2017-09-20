@@ -550,6 +550,38 @@ class Contact(service.AsyncService):
             log.msg('Not notifying for a build that does not match any tags')
             return
 
+        #self.send(str(build))
+        #props = yield self.master.db.builds.getBuildProperties(build['buildid'])
+        #props = yield self.master.data.get(('builds',build['buildid'],'properties'))
+        props = getattr(self.master.botmaster.builders[builderName], "build_props", {})
+
+        msg = None
+        bisect = props.getProperty("bisect")
+        blamed = props.getProperty("blamed")
+        result_edge = props.getProperty("result_edge")
+        if blamed is not None:
+            m = re.match("^(.*\S)\s*<", blamed)
+            blamed = m.group(1)
+        if result_edge == "succ2fail(1)" and blamed is not None:
+            msg = maybeColorize(
+                "%s at %s is blamed." % (blamed, props.getProperty("revision")),
+                'RED', self.useColors)
+            msg += " Will be reverted soon. [%s]" % build['state_string']
+        elif blamed is not None:
+            msg = "%s may be blamed" % maybeColorize(blamed, 'BROWN', self.useColors)
+        elif bisect is not None and bisect.startswith("start("):
+            msg = maybeColorize("Failed. Start bisecting.", 'BROWN', self.useColors)
+            msg += " [%s]" % build['state_string']
+
+        if msg is not None:
+            msg = "%s: %s - %s" % (
+                builderName,
+                msg,
+                utils.getURLForBuild(
+                    self.master, builder['builderid'], buildNumber))
+            self.send(msg)
+            return
+
         if not (yield self.notify_for_finished(build)):
             return
 

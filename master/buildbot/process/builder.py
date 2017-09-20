@@ -506,7 +506,8 @@ class Builder(util_service.ReconfigurableServiceMixin,
             else:
                 result_edge = "fail"
 
-        props = build.getProperties()
+        # FIXME: Props should be passed by data api.
+        self.build_props = props = build.getProperties()
         props.setProperty("result_edge", result_edge, "Builder")
 
         if self.bisect_ss and build.reason == 'bisect':

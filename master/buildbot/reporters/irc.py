@@ -60,10 +60,10 @@ class IrcStatusBot(StatusBot, irc.IRCClient):
 
     # The following methods are called when we write something.
     def groupChat(self, channel, message):
-        self.notice(channel, message.encode('utf-8', 'replace'))
+        self.notice(channel, message)
 
     def chat(self, user, message):
-        self.msg(user, message.encode('utf-8', 'replace'))
+        self.msg(user, message)
 
     def groupDescribe(self, channel, action):
         self.describe(channel, action.encode('utf-8', 'replace'))
