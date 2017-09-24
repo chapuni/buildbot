@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from future.utils import string_types
 
+import json
 import re
 import warnings
 import weakref
@@ -99,6 +100,7 @@ class Builder(util_service.ReconfigurableServiceMixin,
 
         # Bisector
         self.bisect_ss = []
+        self.bisect_last_bad = None
 
         # Invalidated by changesource.
         # This can be cleaned when complete.
@@ -540,6 +542,10 @@ class Builder(util_service.ReconfigurableServiceMixin,
             blamelist = []
             last_who = ''
 
+            # Record "last bad" build.
+            if results == FAILURE:
+                self.bisect_last_bad = build
+
             # Construct consequent blamelist
             for ss in self.bisect_ss:
                 assert len(ss.changes) >= 1
@@ -560,24 +566,41 @@ class Builder(util_service.ReconfigurableServiceMixin,
                     next_bisect_ss += bu
                 log.msg("BISECTING by AUTHORS: %d" % len(next_bisect_ss))
             else:
-                ss = blamelist[0]
+                sss = blamelist[0]
                 if self.bisect_who is None:
-                    self.bisect_who = ss[0].changes[0].who
-                    props.setProperty("blamed", self.bisect_who, "Builder")
-                assert len(ss) > 0
-                if len(ss) > 1:
+                    self.bisect_who = sss[0].changes[0].who
+                    blamed = json.dumps(dict(
+                            event="WHO",
+                            who=self.bisect_who,
+                            ))
+                    props.setProperty("blamed", blamed, "Builder")
+                assert len(sss) > 0
+                if len(sss) > 1:
                     # Bisect by ss
-                    n = (len(ss) + 1) // 2
-                    next_bisect_ss = ss[0:n]
+                    n = (len(sss) + 1) // 2
+                    next_bisect_ss = sss[0:n]
                     log.msg("BISECTING by ss: %d" % len(next_bisect_ss))
-                elif results in (SUCCESS, WARNINGS):
-                    # Run the one ss to confirm BAD.
-                    next_bisect_ss = ss
-                    log.msg("BISECTING(CONRIFM) by ss: %d" % len(next_bisect_ss))
                 else:
-                    log.msg("BISECTING, COMPLETE -- no need to run any more")
-                    ss = self.bisect_ss[0]
-                    props.setProperty("blamed", ss.changes[0].who, "Builder")
+                    blamed=None
+                    if results in (SUCCESS, WARNINGS):
+                        ss = sss[0]
+                        log.msg("BISECTING, COMPLETE(GOOD)")
+                        blamed_build = self.bisect_last_bad
+                    else:
+                        log.msg("BISECTING, COMPLETE(BAD)")
+                        ss = self.bisect_ss[0]
+                        blamed_build = build
+
+                    blamed = json.dumps(dict(
+                            event="BLAME",
+                            who=ss.changes[0].who,
+                            revision=ss.changes[0].revision,
+                            buildid=blamed_build.buildid,
+                            buildNumber=blamed_build.number,
+                            ))
+
+                    props.setProperty("blamed", blamed, "Builder")
+                    # Mark as completed.
                     self.bisect_ss = []
 
             ssids = [ss.ssid for ss in next_bisect_ss]

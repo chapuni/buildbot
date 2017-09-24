@@ -21,6 +21,7 @@ from future.builtins import range
 from future.utils import PY3
 from future.utils import text_type
 
+import json
 import random
 import re
 import shlex
@@ -560,15 +561,22 @@ class Contact(service.AsyncService):
         blamed = props.getProperty("blamed")
         result_edge = props.getProperty("result_edge")
         if blamed is not None:
-            m = re.match("^(.*\S)\s*<", blamed)
-            blamed = m.group(1)
-        if result_edge == "succ2fail(1)" and blamed is not None:
-            msg = maybeColorize(
-                "%s at %s is blamed." % (blamed, props.getProperty("revision")),
-                'RED', self.useColors)
-            msg += " Will be reverted soon. [%s]" % build['state_string']
-        elif blamed is not None:
-            msg = "%s may be blamed" % maybeColorize(blamed, 'BROWN', self.useColors)
+            blames = json.loads(blamed)
+            log.msg(blames)
+            ev = blames["event"]
+            m = re.match("^(.*\S)\s*<", blames["who"])
+            name = m.group(1)
+
+            if ev=="BLAME":
+                msg = maybeColorize(
+                    "%s at %s is blamed." % (name, blames["revision"]),
+                    'RED', self.useColors)
+                msg += " Will be reverted soon. [%s]" % build['state_string']
+                buildNumber = blames["buildNumber"]
+            elif ev=="WHO":
+                msg = "%s may be blamed" % maybeColorize(name, 'BROWN', self.useColors)
+            else:
+                msg = maybeColorize(ev, 'BROWN', self.useColors)
         elif bisect is not None and bisect.startswith("start("):
             msg = maybeColorize("Failed. Start bisecting.", 'BROWN', self.useColors)
             msg += " [%s]" % build['state_string']
