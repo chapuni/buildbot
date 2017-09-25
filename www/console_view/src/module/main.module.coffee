@@ -102,7 +102,7 @@ class Console extends Controller
         @buildrequests = @dataAccessor.getBuildrequests({limit: @buildLimit, order: '-submitted_at'})
         @buildsets = @dataAccessor.getBuildsets({limit: @buildLimit, order: '-submitted_at'})
 
-        @builds.onChange = @changes.onChange = @buildrequests.onChange = @buildsets.onChange = @onChange
+        @builds.onChange = @changes.onChange = @onChange
 
     onChange: (s) =>
         # if there is no data, no need to try and build something.
