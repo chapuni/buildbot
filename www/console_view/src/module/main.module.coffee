@@ -102,7 +102,23 @@ class Console extends Controller
         @buildrequests = @dataAccessor.getBuildrequests({limit: @buildLimit, order: '-submitted_at'})
         @buildsets = @dataAccessor.getBuildsets({limit: @buildLimit, order: '-submitted_at'})
 
-        @builds.onChange = @changes.onChange = @onChange
+        @cellid = 0
+
+        if false # @collapseRevisions
+            @changes.onChange = @onChangeChanges
+        else
+            @builds.onChange = @changes.onChange = @onChange
+
+    onChangeChanges: (s) =>
+        @filtered_changes = @changes
+        @sortBuildersByTags(@all_builders)
+
+        @xxxcells = {}
+        for builder in @all_builders
+            @xxxcells[builder.builderid] ?= {}
+            for change in @changes
+                @xxxcells[builder.builderid][change.changeid] ?= {}
+                @xxxcells[builder.builderid][change.changeid].cellid ?= ++@cellid
 
     onChange: (s) =>
         # if there is no data, no need to try and build something.
