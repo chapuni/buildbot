@@ -138,6 +138,10 @@ class Console extends Controller
                     need_sort = true
             else
                 # [0] should be oldest, since I have to show "not-reverted" change files.
+                if not ("bba" of change.properties)
+                    if ("bba" of @changesByRevision[revision][0].properties)
+                        change.properties.bba = @changesByRevision[revision][0].properties.bba
+
                 @changesByRevision[revision].unshift(change)
             @populateChange(change)
 
@@ -338,10 +342,16 @@ class Console extends Controller
 
                 builderInChange = change.buildersById[build.builderid]
 
-                style = {label: build.number, partial: false}
+                style = {label: "-", partial: false, vfailed: false}
                 if sourcestamp.ssid != last_ss.ssid
                     style.partial = true
                 builderInChange.style[build.buildid] = style
+
+                if "bba" of change.properties
+                    bba = change.properties.bba[0]
+                    if ("builders" of bba) and (build.builderid of bba.builders)
+                        style.vfailed = true
+                        style.label = bba.builders[build.builderid]
 
                 if @showSingleBuild
                     if builderInChange.builds.length == 0

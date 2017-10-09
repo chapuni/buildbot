@@ -35,7 +35,7 @@
                     a(ng-repeat="build in builder.builds | orderBy: ['number']"
                           ng-click='$event.preventDefault();c.selectBuild(build)'
                           ui-sref="build({builder: builder.builderid, build: build.number})"
-                          ng-class="{partial: builder.style[build.buildid]['partial'], 'single-build': builder.style[build.buildid]['single']}"
+                          ng-class="{partial: builder.style[build.buildid]['partial'], 'single-build': builder.style[build.buildid]['single'], vfailed: builder.style[build.buildid]['vfailed']}"
                           style="outline-style:none")
                         span.badge-status(ng-if='build.buildid'
                                       ng-class="c.results2class(build, 'pulse')")
